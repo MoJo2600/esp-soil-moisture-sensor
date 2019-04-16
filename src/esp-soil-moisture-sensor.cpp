@@ -1,15 +1,17 @@
+#include <Arduino.h>
 #include <Homie.h>
 #include "Wire.h"
 
 const int SLEEP_DURATION = 900000000; // 5min 300000000, 30 sek 30000000
-HomieNode moistureNode("humidity", "humidity");
-HomieNode batteryNode("battery", "battery");
-HomieNode temperatureNode("temperature", "temperature");
+HomieNode moistureNode("humidity", "humidity", "humidity");
+HomieNode batteryNode("battery", "battery", "voltage");
+HomieNode temperatureNode("temperature", "temperature", "temperature");
 
 const int PIN_CLK   = D5;
 const int PIN_SOIL  = A0; 
 const int PIN_LED   = D7;
 const int PIN_SWITCH = D8;
+const int PIN_BUTTON = D6;
 
 // I2C address for temperature sensor
 const int TMP_ADDR  = 0x48;
@@ -23,9 +25,9 @@ const int BATTERY_1_6 = 512;
 const int BATTERY_3_2 = 1024;
 
 void setupHandler() {
-  moistureNode.setProperty("unit").send("%");
-  temperatureNode.setProperty("unit").send("°C");
-  batteryNode.setProperty("unit").send("V");
+  // moistureNode.setProperty("unit").send("%");
+  // temperatureNode.setProperty("unit").send("°C");
+  // batteryNode.setProperty("unit").send("V");
 }
 
 void getSendMoisture() {
@@ -81,7 +83,7 @@ void getSendTemperature() {
   
   time_now = millis();
   while(millis() < time_now + 500){
-    //wait approx. 500 ms
+    //wait approx. 500 ms without stopping the cpu
   }
   
   // Request 2 bytes , Msb first
@@ -100,9 +102,6 @@ void getSendTemperature() {
   Homie.getLogger() << "Temperature: " << temperature << " °C" << endl;
   temperatureNode.setProperty("value").send(String(temperature));
 }
-
-//void loopHandler() {
-//}
 
 void onHomieEvent(const HomieEvent& event) {
   switch(event.type) {
@@ -127,18 +126,24 @@ void setup() {
 
   Serial << "Entering Setup" << endl;
  
-  Homie_setFirmware("awesome-soil-moisture", "1.0.0");
+  Homie_setFirmware("esp-soil-moisture-sensor", "1.0.0");
   Homie.setSetupFunction(setupHandler);
-  //.setLoopFunction(loopHandler);
+  // Configure homie to use the build in button for configuration reset
+  // Press and hold button for 2sec to reset the homie configuration
+  // Homie.setResetTrigger(PIN_BUTTON, LOW, 2000);
 
-  moistureNode.advertise("unit");
-  moistureNode.advertise("percent");
+  moistureNode.advertise("percent").setName("Percent")
+                                   .setDatatype("float")
+                                   .setUnit("%");
 
-  batteryNode.advertise("unit");
-  batteryNode.advertise("volts");
-
-  temperatureNode.advertise("unit");
-  temperatureNode.advertise("degrees");
+  moistureNode.advertise("volt").setName("Volt")
+                                .setDatatype("float")
+                                .setUnit("V");
+                              
+  moistureNode.advertise("degrees").setName("Degrees")
+                                   .setDatatype("float")
+                                   .setUnit("°C");
+  
   
   Homie.onEvent(onHomieEvent);
   Homie.setup();
@@ -149,15 +154,17 @@ void setup() {
   pinMode(PIN_SOIL, INPUT);
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_SWITCH, OUTPUT);
+  pinMode(PIN_BUTTON, INPUT);
 
   digitalWrite(PIN_LED, HIGH);
   digitalWrite(PIN_SWITCH, HIGH);
+  digitalWrite(PIN_BUTTON, HIGH);
 
   // device address is specified in datasheet
   Wire.beginTransmission(TMP_ADDR); // transmit to device #44 (0x2c)
-  Wire.write(byte(0x01));            // sends instruction byte
-  Wire.write(0x60);             // sends potentiometer value byte
-  Wire.endTransmission();     // stop transmitting
+  Wire.write(byte(0x01));           // sends instruction byte
+  Wire.write(0x60);                 // sends potentiometer value byte
+  Wire.endTransmission();           // stop transmitting
   
   analogWriteFreq(40000);
   analogWrite(PIN_CLK, 400);
@@ -166,3 +173,35 @@ void setup() {
 void loop() {
   Homie.loop();
 }
+
+
+// void ReadSensor()
+// {
+//   ///////// Get Temp ///////
+//   temp = readTemperature(); // Real Temps in Celcius
+//   temp = (temp * 9 / 5 + 32); // Convert Celcius to Fahrenheit
+
+//   ////// Apply Temp Correction /////
+//   tFar = (temp - TempCal); // Apply temps Correction
+//   tCelcius = (tFar - 32) * 5 / 9; // Convert Fahrenheit to Celcius
+
+//   ///////// Get Battery Voltage ////////
+//   digitalWrite (Switch, LOW); // Battery Voltage Selected
+//   delay(200);
+//   batt = readBatt();
+//   Batt = map(batt, 736, 880, 0, 100); // 736 = 2.5v , 880 = 3.0v , esp dead at 2.3v
+//   if (Batt > 100) Batt = 100;
+//   if (Batt < 0) Batt = 0;
+
+//   ////// Get Soil Moisture //////
+//   delay(100);
+//   digitalWrite (Switch, HIGH); // Soil Moisture Selected
+//   delay(200);
+//   soil_hum = readSoilSensor();
+//   SoilValue = (100 * soil_hum / batt); // Battery Drop Correction
+//   Soil = map(SoilValue, 60, 82, 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+//   if (Soil > 100) Soil = 100;
+//   if (Soil <  0) Soil = 0;
+
+//   ThingSpeak();
+// }
