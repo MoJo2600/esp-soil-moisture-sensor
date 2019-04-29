@@ -18,6 +18,12 @@ This code uses [PlatformIO](https://platformio.org/) for easy compilation and up
 * After flashing, the device will open a wifi access point with a name like `homie-1234567`. Connect to this wifi.
 * The configuration website will automatically detect the new homie device. Follow the setup procedure. If you plan to integrate the device into Openhab i suggest to leave the base MQTT topic to the default value `homie`.
 * The device will restart and connect to your wifi and immediately start sending to the specified MQTT broker.
+* Close the jumper to enable deep sleep
+* Power cycle the the device. Otherwise it will stop after the first transmission and not got to deep sleep.
+
+### Debugging
+
+More to come
 
 ## Adding the device to openhab2
 
