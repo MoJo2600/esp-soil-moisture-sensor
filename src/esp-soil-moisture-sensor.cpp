@@ -1,40 +1,18 @@
-
-/* Soil Moisture Monitor.
-   
-  Hardware ESP8266 Soil Moisture Probe V2.2 (NodeMcu1.0).
-  https://wiki.aprbrother.com/en/ESP_Soil_Moisture_Sensor.html
-
-  Implemented Homie https://homieiot.github.io/ to send messages to MQTT
-
-  Made by 2019/04/21 Christian Erhardt
-  Based on the great work of Ve2Cuz Real Drouin - https://www.qsl.net/v/ve2cuz//garden/
-
-  ///////// Pin Assigment ///////
-
-  A0  Input Soil Moisture and Battery
-  GPIO4   SDA for tmp112
-  GPIO5   SCL for tmp112
-  GPIO12  Button S1 (For Homie configuration reset)
-  GPIO13  LED
-  GPIO14  Clock Output for soil moisture sensor
-  GPIO15  SWITCH for measuring Soil Moisture or Battery Voltage
-
-  //////////////////////////////////////////////////////////////////////
-*/
-
 #include <Arduino.h>
 #include <Homie.h>
 #include <Wire.h>
 
+// if you want to have verbose output, uncomment this:
 //#define DEBUG
 
 // sleep time in microseconds
 const int DEFAULT_DEEP_SLEEP_MINUTES = 15;
 const bool DEFAULT_USE_LED = true;
 
-// homie nodes
+// homie node
 HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
 
+// homie settings
 HomieSetting<long> temperatureIntervalSetting("temperatureInterval", "The sleep duration in minutes");
 HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
 
@@ -49,7 +27,11 @@ const int PIN_BUTTON = D6;
 const int TMP_ADDR  = 0x48;
 unsigned long time_now = 0;
 
-
+/*
+ * Function: nonBlockingDelay
+ * --------------------------
+ * A delay function that will not block the cpu like delay() does.
+ */
 void nonBlockingDelay(int waitmillis) {
   time_now = millis();
   while(millis() < time_now + waitmillis) {
@@ -58,8 +40,13 @@ void nonBlockingDelay(int waitmillis) {
 }
 
 /*
-Reads the sensor connected to pin PIN_SENSOR
-*/
+ * Function: readSensor
+ * --------------------
+ * Reads the sensor connected to pin PIN_SENSOR
+ * Since the moisture sensor and the battery voltage are
+ * connected to the same input pin, this function can be used
+ * for both tasks.
+ */
 float readSensor() {
   float total = 0.0;
   float rawVal = 0.0;
@@ -85,10 +72,16 @@ float readSensor() {
 }
 
 /* 
-This function reads the oisture sensor multiple times and takes the average of the readings.
-Since the reading is related to the battery voltage, a correction is applied to compensate
-for this.
-*/
+ * Function: getSendMoisture
+ * -------------------------
+ * This function reads the moisture sensor multiple times and takes the average of the readings.
+ * It then publishes this value via MQTT.
+ * 
+ * batteryCharge: The current battery charge
+ * 
+ * Since the reading is related to the battery voltage, a correction is applied to compensate
+ * for this.
+ */
 void getSendMoisture(float batteryCharge) {
   // Connect Moisture sensor to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, HIGH);
@@ -113,10 +106,14 @@ void getSendMoisture(float batteryCharge) {
   sensorNode.setProperty("moisture").send(String(moisture));
 }
 
-/* 
-This function reads the battery voltage multiple times and takes the average of the readings.
-The function will return the current battery charge in percent.
-*/
+/*
+ * Function: getSendBattery
+ * ------------------------
+ * This function reads the battery voltage multiple times and takes the average of the readings.
+ * It then publishes this value via MQTT.
+ *  
+ * returns: The current battery charge in percent
+ */
 float getSendBattery() {
   // Connect Battery to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, LOW);
@@ -139,8 +136,11 @@ float getSendBattery() {
 }
 
 /* 
-This function reads the temprature over i2c bus.
-*/
+ * Function: getSendTemperature
+ * ----------------------------
+ * This function reads the temprature over i2c bus.
+ * It then publishes this value via MQTT.
+ */
 void getSendTemperature() {
   float temperature = 0.0;
   
@@ -168,6 +168,16 @@ void getSendTemperature() {
   sensorNode.setProperty("temperature").send(String(temperature));
 }
 
+/*
+ * Function: onHomieEvent
+ * ----------------------
+ * This function handles homie events.
+ * To finish all tasks before deep sleep, we are waiting for the MQTT_READY
+ * event. Then we will read all sensors and publish the values. After this we
+ * call `prepareToSleep()`. When homie has finished all tasks, the event
+ * READY_TO_SLEEP is raised. This is when we send the controller to sleep for
+ * the configured time.
+ */
 void onHomieEvent(const HomieEvent& event) {
   float batteryCharge = 0.0;
   switch(event.type) {
@@ -183,11 +193,16 @@ void onHomieEvent(const HomieEvent& event) {
       break;
     case HomieEventType::READY_TO_SLEEP:
       Serial << "Ready to sleep" << endl;
-      ESP.deepSleep(temperatureIntervalSetting.get() *  1000 * 1000); // 60 *
+      ESP.deepSleep(temperatureIntervalSetting.get() * 60 * 1000 * 1000);
       break;
   }
 }
 
+/*
+ * Function: setup
+ * ---------------
+ * Default arduino setup handler. We prepare the whole environment here.
+ */
 void setup() {
   Serial.begin(74880);
   Serial << endl << endl;
@@ -220,26 +235,31 @@ void setup() {
   // Press and hold button for 2sec to reset the homie configuration
   Homie.setResetTrigger(PIN_BUTTON, LOW, 2000);
 
-  // Set LED Pin for status messages
+  // Set LED Pin for status messages, if LED is enabled
   if (useLEDSetting.get()) {
     Homie.setLedPin(PIN_LED, 1);
   }
 
   // Advertise properties
   sensorNode.advertise("humidity")
-            .setDatatype("int")
+            .setName("Humudity")
+            .setDatatype("integer")
             .setUnit("%");
   sensorNode.advertise("temperature")
-            .setDatatype("int")
+            .setName("Temperature")
+            .setDatatype("float")
             .setUnit("°C");
   sensorNode.advertise("battery")
-            .setDatatype("int")
+            .setName("Battery")
+            .setDatatype("integer")
             .setUnit("%");
   
   // Define event handler
   Homie.onEvent(onHomieEvent);
+  // Setup homie
   Homie.setup();
 
+  // Setup I2C library
   Wire.begin();
 
   pinMode(PIN_CLK, OUTPUT);
@@ -250,7 +270,6 @@ void setup() {
 
   // Set GPIO16 (=D0) pin mode to allow for deep sleep
   // Connect D0 to RST for this to work.
-  // @TODO: Check if this is really needed
   pinMode(D0, WAKEUP_PULLUP);
 
   digitalWrite(PIN_LED, HIGH);
@@ -267,6 +286,11 @@ void setup() {
   analogWrite(PIN_CLK, 400);
 }
 
+/*
+ * Function: loop
+ * --------------
+ * Default arduino loop function. Call homie loop. 
+ */
 void loop() {
   Homie.loop();
 }
