@@ -6,7 +6,7 @@
 //#define DEBUG
 
 // sleep time in microseconds
-const int DEFAULT_DEEP_SLEEP_MINUTES = 15;
+const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
 const bool DEFAULT_USE_LED = true;
 
 // homie node
@@ -90,19 +90,26 @@ void getSendMoisture(float batteryCharge) {
   int moisture = 0;
   float moist_raw = readSensor();
 
+  #ifdef DEBUG
+  Homie.getLogger() << "Moisture raw: " << moist_raw << endl;
+  #endif
+
   moisture = (100 * moist_raw / batteryCharge); // Battery Drop Correction
+
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after battery correction: " << moisture << endl;
   #endif
+
   moisture = map(moisture, 640, 830, 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
   #endif
+
   if (moisture > 100) moisture = 100;
   if (moisture <  0) moisture = 0;
 
   Homie.getLogger() << "Moisture: " << moisture << endl;
-  // moistureNode.setProperty("percent").send(String(moisture));
   sensorNode.setProperty("moisture").send(String(moisture));
 }
 
@@ -122,14 +129,20 @@ float getSendBattery() {
   int batteryCharge = 0;
   float battery_raw = readSensor();
 
-  batteryCharge = map(battery_raw, 736, 880, 0, 100); // 736 = 2.5v , 880 = 3.0v , esp dead at 2.3v
+  // 736 = 2.5v , 880 = 3.0v , esp dead at 2.3v
+  batteryCharge = map(battery_raw, 736, 880, 0, 100); 
+ 
   #ifdef DEBUG
-  Homie.getLogger() << "Moisture after mapping: " << batteryCharge << endl;
+  Homie.getLogger() << "Battery charge after mapping: " << batteryCharge << endl;
   #endif
+ 
   if (batteryCharge > 100) batteryCharge = 100;
   if (batteryCharge < 0) batteryCharge = 0;
   
+  #ifdef DEBUG
   Homie.getLogger() << "Battery: " << batteryCharge << " %" << endl;
+  #endif
+
   sensorNode.setProperty("battery").send(String(batteryCharge));
 
   return batteryCharge;
@@ -164,7 +177,10 @@ void getSendTemperature() {
     temperature = value * 0.0625;
   }
  
+  #ifdef DEBUG
   Homie.getLogger() << "Temperature: " << temperature << " °C" << endl;
+  #endif
+
   sensorNode.setProperty("temperature").send(String(temperature));
 }
 
@@ -241,8 +257,8 @@ void setup() {
   }
 
   // Advertise properties
-  sensorNode.advertise("humidity")
-            .setName("Humudity")
+  sensorNode.advertise("moisture")
+            .setName("Moisture")
             .setDatatype("integer")
             .setUnit("%");
   sensorNode.advertise("temperature")
@@ -258,20 +274,18 @@ void setup() {
   Homie.onEvent(onHomieEvent);
   // Setup homie
   Homie.setup();
-
   // Setup I2C library
   Wire.begin();
-
+  // Prepare pins
   pinMode(PIN_CLK, OUTPUT);
   pinMode(PIN_SENSOR, INPUT);
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_SWITCH, OUTPUT);
   pinMode(PIN_BUTTON, INPUT);
-
   // Set GPIO16 (=D0) pin mode to allow for deep sleep
   // Connect D0 to RST for this to work.
   pinMode(D0, WAKEUP_PULLUP);
-
+  // initialize pin states
   digitalWrite(PIN_LED, HIGH);
   digitalWrite(PIN_SWITCH, HIGH);
   digitalWrite(PIN_BUTTON, HIGH);
