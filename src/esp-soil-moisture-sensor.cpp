@@ -1,3 +1,25 @@
+/* Soil Moisture Monitor.
+  
+  Hardware ESP8266 Soil Moisture Probe V2.2 (NodeMcu1.0).
+  https://wiki.aprbrother.com/en/ESP_Soil_Moisture_Sensor.html
+
+  Implemented Homie https://homieiot.github.io/ to send messages to MQTT
+
+  Made by Christian Erhardt 2019/04/21
+  Based on the great work of Ve2Cuz Real Drouin - https://www.qsl.net/v/ve2cuz//garden/
+
+  ///////// Pin Assigment ///////
+
+  A0  Input Soil Moisture and Battery
+  GPIO4   SDA for tmp112
+  GPIO5   SCL for tmp112
+  GPIO12  Button S1 (For Homie configuration reset)
+  GPIO13  LED
+  GPIO14  Clock Output for soil moisture sensor
+  GPIO15  SWITCH for measuring Soil Moisture or Battery Voltage
+
+  //////////////////////////////////////////////////////////////////////
+*/
 #include <Arduino.h>
 #include <Homie.h>
 #include <Wire.h>
