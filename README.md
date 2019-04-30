@@ -34,6 +34,8 @@ To use this firmware on your sensor follow the following steps:
 * Insert batteries again
 * You can then subscribe to the topic homie/# on your MQTT broker and you will see the incoming messages
 
+  ![MQTTExplorer](doc/MQTT.png)
+
 ## Developing
 
 ### How to flash and configure
