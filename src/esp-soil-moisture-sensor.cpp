@@ -18,7 +18,7 @@ HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active"
 
 // Pin settings
 const int PIN_CLK    = D5;
-const int PIN_SENSOR   = A0; 
+const int PIN_SENSOR = A0; 
 const int PIN_LED    = D7;
 const int PIN_SWITCH = D8;
 const int PIN_BUTTON = D6;
@@ -51,7 +51,7 @@ float readSensor() {
   float total = 0.0;
   float rawVal = 0.0;
   float ret = 0.0;
-  int sampleCount = 3;
+  float sampleCount = 3.0;
 
   for(int i = 0; i < sampleCount; i++){
     rawVal = analogRead(PIN_SENSOR);
@@ -89,6 +89,7 @@ void getSendMoisture(float batteryCharge) {
 
   int moisture = 0;
   float moist_raw = readSensor();
+  sensorNode.setProperty("moistureraw").send(String(moist_raw));
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture raw: " << moist_raw << endl;
@@ -128,9 +129,10 @@ float getSendBattery() {
 
   int batteryCharge = 0;
   float battery_raw = readSensor();
+  sensorNode.setProperty("batteryraw").send(String(battery_raw));
 
-  // 736 = 2.5v , 880 = 3.0v , esp dead at 2.3v
-  batteryCharge = map(battery_raw, 736, 880, 0, 100); 
+  // 790 = 2.5v , 975 = 3.0v , esp dead at 2.3v
+  batteryCharge = map(battery_raw, 790, 975, 0, 100); 
  
   #ifdef DEBUG
   Homie.getLogger() << "Battery charge after mapping: " << batteryCharge << endl;
@@ -164,7 +166,7 @@ void getSendTemperature() {
   // End Transmission
   Wire.endTransmission();
  
-  // Request 2 bytes , Msb first
+  // Request 2 bytes , Msb first to get temperature
   Wire.requestFrom(TMP_ADDR, 2);
   // Read temperature as Celsius (the default)
   while(Wire.available()) {
@@ -226,9 +228,12 @@ void setup() {
 
   Homie.setLoggingPrinter(&Serial);
 
+  // Set up default values for settings
   temperatureIntervalSetting.setDefaultValue(DEFAULT_DEEP_SLEEP_MINUTES)
                             .setValidator([] (long candidate) {
-                              return candidate > 0 && candidate < 72;
+                              // 72 Minutes is the maximum sleep time supported
+                              // by ESP8266 https://thingpulse.com/max-deep-sleep-for-esp8266/
+                              return candidate > 0 && candidate <= 70;
                             });
 
   useLEDSetting.setDefaultValue(DEFAULT_USE_LED);
@@ -245,7 +250,7 @@ void setup() {
     #endif
   }
  
-  Homie_setFirmware("esp-soil-moisture-sensor", "1.0.1");
+  Homie_setFirmware("esp-soil-moisture-sensor", "1.0.0");
 
   // Configure homie to use the build in button for configuration reset
   // Press and hold button for 2sec to reset the homie configuration
@@ -261,6 +266,10 @@ void setup() {
             .setName("Moisture")
             .setDatatype("integer")
             .setUnit("%");
+  sensorNode.advertise("moistureraw")
+            .setName("Moisture RAW value")
+            .setDatatype("float")
+            .setUnit("");  
   sensorNode.advertise("temperature")
             .setName("Temperature")
             .setDatatype("float")
@@ -269,7 +278,11 @@ void setup() {
             .setName("Battery")
             .setDatatype("integer")
             .setUnit("%");
-  
+  sensorNode.advertise("batteryraw")
+            .setName("Battery RAW value")
+            .setDatatype("float")
+            .setUnit("");  
+
   // Define event handler
   Homie.onEvent(onHomieEvent);
   // Setup homie
@@ -287,7 +300,7 @@ void setup() {
   pinMode(D0, WAKEUP_PULLUP);
   // initialize pin states
   digitalWrite(PIN_LED, HIGH);
-  digitalWrite(PIN_SWITCH, HIGH);
+  digitalWrite(PIN_SWITCH, LOW);
   digitalWrite(PIN_BUTTON, HIGH);
 
   // device address is specified in datasheet
