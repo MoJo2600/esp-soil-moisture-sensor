@@ -191,10 +191,9 @@ void getSendTemperature() {
   // Request 2 bytes , Msb first to get temperature
   Wire.requestFrom(TMP_ADDR, 2);
   // Read temperature as Celsius (the default)
-  while(Wire.available()) {
+  if(Wire.available() == 2) {
     int msb = Wire.read();
     int lsb = Wire.read();
-    Wire.endTransmission();
 
     int rawtmp = msb << 8 | lsb;
     int value = rawtmp >> 4;
@@ -272,7 +271,7 @@ void setup() {
     #endif
   }
  
-  Homie_setFirmware("esp-soil-moisture-sensor", "1.0.0");
+  Homie_setFirmware("esp-soil-moisture-sensor", "1.0.1");
 
   // Configure homie to use the build in button for configuration reset
   // Press and hold button for 2sec to reset the homie configuration
