@@ -3,6 +3,8 @@
 
 This repository contains code to use the [Homie](https://homieiot.github.io/homie-esp8266/docs/develop-v3/quickstart/what-is-it/) framework and its IoT convention with a soil moisture sensor from [April Brothers](https://wiki.aprbrother.com/en/ESP_Soil_Moisture_Sensor.html) (Source and schematic: https://github.com/AprilBrother/esp-soil-moisture-sensor). When this firmware is running, the sensor will publish it's sensor readings in the homie [convention format](https://homieiot.github.io/specification/spec-core-v2_0_1/). Based on the work of ve2cuz - [Real Drouin](https://www.qsl.net/v/ve2cuz//garden/)
 
+![Soil Moisture Sensor](doc/sensor.jpg)
+
 The following properties are published:
 
 |Property      | Description               |
@@ -21,7 +23,6 @@ To use this firmware on your sensor follow the following steps:
 * Remove the jumper from the board
 * [Open the configuration website](http://setup.homie-esp8266.marvinroger.fr/)
 * Connect the flasher and write the firmware to your device
-
    ```
    esptool -cd nodemcu -cb 115200 -cp "/dev/ttyUSB0" -cf firmware.bin
    ```
@@ -33,8 +34,7 @@ To use this firmware on your sensor follow the following steps:
 * Add Jumper to enable deep sleep
 * Insert batteries again
 * You can then subscribe to the topic homie/# on your MQTT broker and you will see the incoming messages
-
-  ![MQTTExplorer](doc/MQTT.png)
+![MQTTExplorer](doc/MQTT.png)
 
 ## Developing
 
