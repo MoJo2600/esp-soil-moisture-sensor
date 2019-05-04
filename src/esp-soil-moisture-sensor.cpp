@@ -27,6 +27,14 @@
 // if you want to have verbose output, uncomment this:
 //#define DEBUG
 
+#define FW_NAME "esp-soil-moisture-sensor"
+#define FW_VERSION "1.0.2"
+
+/* Magic sequence for Autodetectable Binary Upload */
+const char *__FLAGGED_FW_NAME = "\xbf\x84\xe4\x13\x54" FW_NAME "\x93\x44\x6b\xa7\x75";
+const char *__FLAGGED_FW_VERSION = "\x6a\x3f\x3e\x0e\xe1" FW_VERSION "\xb0\x30\x48\xd4\x1a";
+/* End of magic sequence for Autodetectable Binary Upload */
+
 // sleep time in microseconds
 const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
 const bool DEFAULT_USE_LED = true;
@@ -123,7 +131,7 @@ void getSendMoisture(float batteryCharge) {
   Homie.getLogger() << "Moisture after battery correction: " << moisture << endl;
   #endif
 
-  moisture = map(moisture, 640, 830, 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+  moisture = map(moisture, 64, 83, 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
@@ -232,7 +240,7 @@ void onHomieEvent(const HomieEvent& event) {
       break;
     case HomieEventType::READY_TO_SLEEP:
       Serial << "Ready to sleep" << endl;
-      ESP.deepSleep(temperatureIntervalSetting.get() * 60 * 1000 * 1000);
+      Homie.doDeepSleep(temperatureIntervalSetting.get() * 60 * 1000 * 1000);
       break;
   }
 }
@@ -246,6 +254,20 @@ void setup() {
   Serial.begin(74880);
   Serial << endl << endl;
   Serial << "Entering Setup" << endl;
+
+  // Prepare pins
+  pinMode(PIN_CLK, OUTPUT);
+  pinMode(PIN_SENSOR, INPUT);
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_SWITCH, OUTPUT);
+  pinMode(PIN_BUTTON, INPUT);
+  // Set GPIO16 (=D0) pin mode to allow for deep sleep
+  // Connect D0 to RST for this to work.
+  pinMode(D0, WAKEUP_PULLUP);
+  // initialize pin states
+  digitalWrite(PIN_LED, HIGH);
+  digitalWrite(PIN_SWITCH, LOW);
+  digitalWrite(PIN_BUTTON, HIGH);
 
   Homie.setLoggingPrinter(&Serial);
 
@@ -271,16 +293,11 @@ void setup() {
     #endif
   }
  
-  Homie_setFirmware("esp-soil-moisture-sensor", "1.0.1");
+  Homie_setFirmware(FW_NAME, FW_VERSION);
 
   // Configure homie to use the build in button for configuration reset
   // Press and hold button for 2sec to reset the homie configuration
   Homie.setResetTrigger(PIN_BUTTON, LOW, 2000);
-
-  // Set LED Pin for status messages, if LED is enabled
-  if (useLEDSetting.get()) {
-    Homie.setLedPin(PIN_LED, 1);
-  }
 
   // Advertise properties
   sensorNode.advertise("moisture")
@@ -306,23 +323,19 @@ void setup() {
 
   // Define event handler
   Homie.onEvent(onHomieEvent);
+
+  // Set LED Pin for status messages, if LED is enabled
+  if (useLEDSetting.get()) {
+    Homie.setLedPin(PIN_LED, 1);
+  } else {
+    Homie.disableLedFeedback();    
+  }
+
   // Setup homie
   Homie.setup();
   // Setup I2C library
   Wire.begin();
-  // Prepare pins
-  pinMode(PIN_CLK, OUTPUT);
-  pinMode(PIN_SENSOR, INPUT);
-  pinMode(PIN_LED, OUTPUT);
-  pinMode(PIN_SWITCH, OUTPUT);
-  pinMode(PIN_BUTTON, INPUT);
-  // Set GPIO16 (=D0) pin mode to allow for deep sleep
-  // Connect D0 to RST for this to work.
-  pinMode(D0, WAKEUP_PULLUP);
-  // initialize pin states
-  digitalWrite(PIN_LED, HIGH);
-  digitalWrite(PIN_SWITCH, LOW);
-  digitalWrite(PIN_BUTTON, HIGH);
+
 
   // device address is specified in datasheet
   Wire.beginTransmission(TMP_ADDR); // transmit to device #44 (0x2c)
