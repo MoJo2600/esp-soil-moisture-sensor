@@ -23,6 +23,7 @@
 #include <Arduino.h>
 #include <Homie.h>
 #include <Wire.h>
+#include <Timer.h>
 
 // if you want to have verbose output, uncomment this:
 //#define DEBUG
@@ -38,13 +39,22 @@ const char *__FLAGGED_FW_VERSION = "\x6a\x3f\x3e\x0e\xe1" FW_VERSION "\xb0\x30\x
 // sleep time in microseconds
 const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
 const bool DEFAULT_USE_LED = true;
+const int DEFAULT_VCC_READING_3V = 958;
+const int DEFAULT_MOIST_DRY_READING_AT_3V = 727;
+const int DEFAULT_MOIST_WET_READING_AT_3V = 540;
+
+// Value range for VCC Readings from 3.0 V to 2.5 V
+const int VCC_READING_RANGE = 166;
 
 // homie node
 HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
 
 // homie settings
-HomieSetting<long> temperatureIntervalSetting("temperatureInterval", "The sleep duration in minutes");
+HomieSetting<long> temperatureIntervalSetting("temperatureInterval", "The sleep duration in minutes (Maximum 71 minutes)");
 HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
+HomieSetting<long> vccReading3VSetting("vccReading3V", "Battery RAW sensor reading at 3V");
+HomieSetting<long> moistDryReadingAt3VSetting("moistDryReadingAt3V", "Moisture sensor reading dry at 3V VCC");
+HomieSetting<long> moistWetReadingAt3VSetting("moistWetReadingAt3V", "Moisture sensor reading submerged in water at 3V VCC");
 
 // Pin settings
 const int PIN_CLK    = D5;
@@ -57,6 +67,18 @@ const int PIN_BUTTON = D6;
 const int TMP_ADDR  = 0x48;
 unsigned long time_now = 0;
 
+// Timer to prepare to sleep
+Timer sleepTimer;
+
+/*
+* Function: prepareToSleep
+* ------------------------
+* Callback to tell homie to prepare to sleep
+*/
+void prepareSleep() {
+  Homie.prepareToSleep();
+}
+
 /*
  * Function: nonBlockingDelay
  * --------------------------
@@ -66,6 +88,7 @@ void nonBlockingDelay(int waitmillis) {
   time_now = millis();
   while(millis() < time_now + waitmillis) {
     //wait without stopping the cpu
+    yield();
   }
 }
 
@@ -77,11 +100,11 @@ void nonBlockingDelay(int waitmillis) {
  * connected to the same input pin, this function can be used
  * for both tasks.
  */
-float readSensor() {
-  float total = 0.0;
-  float rawVal = 0.0;
-  float ret = 0.0;
-  float sampleCount = 3.0;
+int readSensor() {
+  int total = 0;
+  int rawVal = 0;
+  int ret = 0;
+  int sampleCount = 3;
 
   for(int i = 0; i < sampleCount; i++){
     rawVal = analogRead(PIN_SENSOR);
@@ -92,7 +115,7 @@ float readSensor() {
     nonBlockingDelay(50);
   }
 
-  ret = total / sampleCount;
+  ret = int((float)total / (float)sampleCount);
 
   #ifdef DEBUG
   Homie.getLogger() << "Result: " << ret << endl;
@@ -112,26 +135,28 @@ float readSensor() {
  * Since the reading is related to the battery voltage, a correction is applied to compensate
  * for this.
  */
-void getSendMoisture(float batteryCharge) {
+void getSendMoisture(int batteryCharge) {
   // Connect Moisture sensor to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, HIGH);
   nonBlockingDelay(200);
 
   int moisture = 0;
-  float moist_raw = readSensor();
+  int moist_raw = readSensor();
   sensorNode.setProperty("moistureraw").send(String(moist_raw));
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture raw: " << moist_raw << endl;
   #endif
 
-  moisture = (100 * moist_raw / batteryCharge); // Battery Drop Correction
+  // Battery Drop Correction to normalize to reading at 3.0V
+  moisture = vccReading3VSetting.get() * moist_raw / batteryCharge;
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after battery correction: " << moisture << endl;
   #endif
 
-  moisture = map(moisture, 64, 83, 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+  // Map the moisture to the min and max reading of the sensor
+  moisture = map(moisture, moistWetReadingAt3VSetting.get(), moistDryReadingAt3VSetting.get(), 0, 100); // Convert to 0 - 100%, 0=Dry, 100=Wet
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
@@ -152,17 +177,16 @@ void getSendMoisture(float batteryCharge) {
  *  
  * returns: The current battery charge in percent
  */
-float getSendBattery() {
+int getSendBattery() {
   // Connect Battery to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, LOW);
   nonBlockingDelay(200);
 
   int batteryCharge = 0;
-  float battery_raw = readSensor();
+  int battery_raw = readSensor();
   sensorNode.setProperty("batteryraw").send(String(battery_raw));
 
-  // 790 = 2.5v , 975 = 3.0v , esp dead at 2.3v
-  batteryCharge = map(battery_raw, 790, 975, 0, 100); 
+  batteryCharge = map(battery_raw, vccReading3VSetting.get()-VCC_READING_RANGE, vccReading3VSetting.get(), 0, 100); 
  
   #ifdef DEBUG
   Homie.getLogger() << "Battery charge after mapping: " << batteryCharge << endl;
@@ -177,7 +201,7 @@ float getSendBattery() {
 
   sensorNode.setProperty("battery").send(String(batteryCharge));
 
-  return batteryCharge;
+  return battery_raw;
 }
 
 /* 
@@ -236,7 +260,7 @@ void onHomieEvent(const HomieEvent& event) {
       nonBlockingDelay(200);
       getSendTemperature();
       Serial << "Finished stuff, preparing for deep sleep..." << endl;
-      Homie.prepareToSleep();
+      sleepTimer.after(100, prepareSleep);
       break;
     case HomieEventType::READY_TO_SLEEP:
       Serial << "Ready to sleep" << endl;
@@ -280,6 +304,19 @@ void setup() {
                             });
 
   useLEDSetting.setDefaultValue(DEFAULT_USE_LED);
+
+  vccReading3VSetting.setDefaultValue(DEFAULT_VCC_READING_3V)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;                
+              });
+  moistDryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;                
+              });
+  moistWetReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_WET_READING_AT_3V)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;                
+              });
 
   // Workaround for bug https://github.com/homieiot/homie-esp8266/issues/351
   if (Homie.isConfigured()) {
@@ -354,4 +391,5 @@ void setup() {
  */
 void loop() {
   Homie.loop();
+  sleepTimer.update();
 }
