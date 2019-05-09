@@ -36,12 +36,17 @@ const char *__FLAGGED_FW_NAME = "\xbf\x84\xe4\x13\x54" FW_NAME "\x93\x44\x6b\xa7
 const char *__FLAGGED_FW_VERSION = "\x6a\x3f\x3e\x0e\xe1" FW_VERSION "\xb0\x30\x48\xd4\x1a";
 /* End of magic sequence for Autodetectable Binary Upload */
 
+// DEFAULT SETTINGS
 // sleep time in microseconds
 const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
+// use led or not - the led is good for debugging, but not for battery life
 const bool DEFAULT_USE_LED = true;
+// VCC raw reading @3.0V
 const int DEFAULT_VCC_READING_3V = 958;
-const int DEFAULT_MOIST_DRY_READING_AT_3V = 727;
-const int DEFAULT_MOIST_WET_READING_AT_3V = 540;
+// Moisture dry reading @3.0V
+const int DEFAULT_MOIST_DRY_READING_AT_3V = 540;
+// Moisture wet reading @3.0V
+const int DEFAULT_MOIST_WET_READING_AT_3V = 727;
 
 // Value range for VCC Readings from 3.0 V to 2.5 V
 const int VCC_READING_RANGE = 166;
@@ -156,7 +161,7 @@ void getSendMoisture(int batteryCharge) {
   #endif
 
   // Map the moisture to the min and max reading of the sensor
-  moisture = map(moisture, moistWetReadingAt3VSetting.get(), moistDryReadingAt3VSetting.get(), 0, 100); // Convert to 0 - 100%, 0=Dry, 100=Wet
+  moisture = map(moisture, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
