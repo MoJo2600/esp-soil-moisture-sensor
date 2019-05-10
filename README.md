@@ -38,7 +38,7 @@ To use this firmware on your sensor follow the following steps:
 * Remove the flasher
 * Insert batteries
 * Connect to the new Wifi (homie-123456)
-* Open the configuration website, the device is found and you can follow the configuration process
+* Open the configuration website, the device is found and you can follow the configuration process. If you want to enable OTA updates, check the checkbox OTA.
 * Remove the batteries
 * Add Jumper to enable deep sleep
 * Insert batteries again
@@ -82,19 +82,19 @@ tests showed, that the sensor stops working realiable below 2.5V.
 
 Next test was to measure the moisture sensor at its nominal voltage 3V and 2.5V.
 
-| @3.0V     | Moist 100% | Moist 0% | Corrected 100% | Corrected 0% |
-|-----------|-----------:|---------:|---------------:|-------------:|
-| Sensor #1 | 568        | 746      |                |              |
-| Sensor #2 | 505        | 712      |                |              |
-| Sensor #3 | 546        | 724      |                |              |
-| **Avg**   | **540**    | **727**  | **540**        | **727**      |
+| @3.0V     | Moist   0% | Moist 100% | Corrected 0% | Corrected 0% |
+|-----------|-----------:|-----------:|-------------:|-------------:|
+| Sensor #1 | 568        | 746        |              |              |
+| Sensor #2 | 505        | 712        |              |              |
+| Sensor #3 | 546        | 724        |              |              |
+| **Avg**   | **540**    | **727**    | **540**      | **727**      |
 
-| @2.5V     | Moist 100% | Moist 0% | Corrected 100% | Corrected 0% |
-|-----------|-----------:|---------:|---------------:|-------------:|
-| Sensor #1 | 469        | 610      | 567            | 738          |
-| Sensor #1 | 412        | 580      | 497            | 700          |
-| Sensor #3 | 448        | 589      | 548            | 721          |
-| **Avg**   | **443**    | **593**  | **536**        | **717**      |
+| @2.5V     | Moist   0% | Moist 100% | Corrected 0% | Corrected 100% |
+|-----------|-----------:|-----------:|-------------:|---------------:|
+| Sensor #1 | 469        | 610        | 567          | 738            |
+| Sensor #1 | 412        | 580        | 497          | 700            |
+| Sensor #3 | 448        | 589        | 548          | 721            |
+| **Avg**   | **443**    | **593**    | **536**      | **717**        |
 
 I implemented a simple correction method, that takes the change in battery voltage into
 account. The values can be adjusted to your sensor, if you measure the values. The default
@@ -116,13 +116,27 @@ You can now take the following JSON and publish it as a retained message to ```h
  {
   "settings": {
     "vccReading3V": YOUR_BATTERYRAW_VALUE,
-    "moistWetReadingAt3V": YOUR_DRY_MOISTURERAW_VALUE,
-    "moistDryReadingAt3V": YOUR_WET_MOISTURERAW_VALUE
+    "moistWetReadingAt3V": YOUR_WET_MOISTURERAW_VALUE,
+    "moistDryReadingAt3V": YOUR_DRY_MOISTURERAW_VALUE
   }
 }
 ```
 
 The next time the device goes online it will read this configuration and use the values from now on.
+
+## OTA - Over the air update
+
+You don't need to collect all your devices and connect a programmer to do a firmware upgrade. You can use the provided
+script in `scripts` to schedule a update. Just compile your new firmware file and execute the script with the parameters
+matching you setup and devicenames. You have to enable OTA Updates during configuration (You can always patch the
+configuration like it is described [here](#A-word-about-precision))
+
+````
+cd scripts/
+./otaupdate.sh 192.168.178.10 soil01
+```
+
+The next time the device wakes up, it will check for a new firmware and update itself.
 
 ## Developing
 
