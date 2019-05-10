@@ -131,7 +131,7 @@ script in `scripts` to schedule a update. Just compile your new firmware file an
 matching you setup and devicenames. You have to enable OTA Updates during configuration (You can always patch the
 configuration like it is described [here](#A-word-about-precision))
 
-````
+```
 cd scripts/
 ./otaupdate.sh 192.168.178.10 soil01
 ```
