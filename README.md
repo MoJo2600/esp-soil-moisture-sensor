@@ -21,8 +21,8 @@ The following settings can be changed
 |---                 |---                                   |
 |useLED              | Use the LED to indicate status. Good for debugging, bad for battery life (Default: false)            |
 |vccReading3V        | RAW reading of the ADC for 3V (Default: 958) See [here](#A-word-about-precision) for details          |
-|moistWetReadingAt3V | RAW reading for 100% wet sensor at 3V (Default: 540) See [here](#A-word-about-precision) for details  |
-|moistDryReadingAt3V | RAW reading for 100% dry sensor at 3V (Default: 727) See [here](#A-word-about-precision) for details  |
+|moistWetReadingAt3V | RAW reading for 100% wet sensor at 3V (Default: 727) See [here](#A-word-about-precision) for details  |
+|moistDryReadingAt3V | RAW reading for 100% dry sensor at 3V (Default: 540) See [here](#A-word-about-precision) for details  |
 
 ## TL;DR
 
