@@ -160,8 +160,10 @@ This code uses [PlatformIO](https://platformio.org/) for easy compilation and up
 
 ### Debugging
 
-More to come
+You can uncomment the `DEBUG` definition at the beginning of the code to enable a more informative log on the serial console.
 
 ## Adding the device to openhab2
 
-More to come
+The MQTT binding in OpenHAB2 natively supports homie devices. If you configure your broker, the devices will pop up in the in inbox in the PaperUI. You can then integrate them as you like. If you add persistence to influx to it, you can generate graphs with grafana.
+
+![Grafana Chart](doc/grafana.png)
