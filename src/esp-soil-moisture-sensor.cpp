@@ -377,9 +377,6 @@ void setup() {
   Wire.write(0x60);                 // sends potentiometer value byte
   Wire.endTransmission();           // stop transmitting
 
- 
-  fuelGauge.quickstart();
-
   analogWriteFreq(40000);
   analogWrite(PIN_CLK, 400);
 }
