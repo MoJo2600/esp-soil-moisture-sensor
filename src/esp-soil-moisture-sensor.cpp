@@ -24,6 +24,7 @@
 #include <Homie.h>
 #include <Wire.h>
 #include <Timer.h>
+#include <MAX1704X.h>
 
 // if you want to have verbose output, uncomment this:
 //#define DEBUG
@@ -43,10 +44,10 @@ const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
 const bool DEFAULT_USE_LED = true;
 // VCC raw reading @3.0V
 const int DEFAULT_VCC_READING_3V = 958;
-// Moisture dry reading @3.0V
-const int DEFAULT_MOIST_DRY_READING_AT_3V = 540;
 // Moisture wet reading @3.0V
-const int DEFAULT_MOIST_WET_READING_AT_3V = 727;
+const int DEFAULT_MOIST_WET_READING_AT_3V = 540;
+// Moisture dry reading @3.0V
+const int DEFAULT_MOIST_DRY_READING_AT_3V = 792;
 
 // Value range for VCC Readings from 3.0 V to 2.5 V
 const int VCC_READING_RANGE = 166;
@@ -70,6 +71,9 @@ const int PIN_BUTTON = D6;
 
 // I2C address for temperature sensor
 const int TMP_ADDR  = 0x48;
+
+MAX1704X fuelGauge = MAX1704X(5);
+
 unsigned long time_now = 0;
 
 // Timer to prepare to sleep
@@ -140,28 +144,21 @@ int readSensor() {
  * Since the reading is related to the battery voltage, a correction is applied to compensate
  * for this.
  */
-void getSendMoisture(int batteryCharge) {
+void getSendMoisture() {
   // Connect Moisture sensor to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, HIGH);
   nonBlockingDelay(200);
 
   int moisture = 0;
-  int moist_raw = readSensor();
-  sensorNode.setProperty("moistureraw").send(String(moist_raw));
+  int moisture_raw = readSensor();
+  sensorNode.setProperty("moistureraw").send(String(moisture_raw));
 
   #ifdef DEBUG
-  Homie.getLogger() << "Moisture raw: " << moist_raw << endl;
-  #endif
-
-  // Battery Drop Correction to normalize to reading at 3.0V
-  moisture = vccReading3VSetting.get() * moist_raw / batteryCharge;
-
-  #ifdef DEBUG
-  Homie.getLogger() << "Moisture after battery correction: " << moisture << endl;
+  Homie.getLogger() << "Moisture raw: " << moisture << endl;
   #endif
 
   // Map the moisture to the min and max reading of the sensor
-  moisture = map(moisture, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+  moisture = map(moisture_raw, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
@@ -182,31 +179,20 @@ void getSendMoisture(int batteryCharge) {
  *  
  * returns: The current battery charge in percent
  */
-int getSendBattery() {
-  // Connect Battery to the Pin via on PCB switch
-  digitalWrite(PIN_SWITCH, LOW);
-  nonBlockingDelay(200);
+void getSendBattery() {
+  if (fuelGauge.isSleeping())
+  {
+    fuelGauge.wake();
+  }
 
-  int batteryCharge = 0;
-  int battery_raw = readSensor();
-  sensorNode.setProperty("batteryraw").send(String(battery_raw));
+  sensorNode.setProperty("batteryraw").send(String(fuelGauge.adc()));
+  sensorNode.setProperty("batteryvoltage").send(String(fuelGauge.voltage()));
+  sensorNode.setProperty("battery").send(String(fuelGauge.percent()));
 
-  batteryCharge = map(battery_raw, vccReading3VSetting.get()-VCC_READING_RANGE, vccReading3VSetting.get(), 0, 100); 
- 
-  #ifdef DEBUG
-  Homie.getLogger() << "Battery charge after mapping: " << batteryCharge << endl;
-  #endif
- 
-  if (batteryCharge > 100) batteryCharge = 100;
-  if (batteryCharge < 0) batteryCharge = 0;
-  
-  #ifdef DEBUG
-  Homie.getLogger() << "Battery: " << batteryCharge << " %" << endl;
-  #endif
-
-  sensorNode.setProperty("battery").send(String(batteryCharge));
-
-  return battery_raw;
+  if (!fuelGauge.isSleeping())
+  {
+    fuelGauge.sleep();
+  }
 }
 
 /* 
@@ -259,9 +245,9 @@ void onHomieEvent(const HomieEvent& event) {
   switch(event.type) {
     case HomieEventType::MQTT_READY:    
       Serial << "MQTT connected, doing stuff..." << endl;
-      batteryCharge = getSendBattery();
+      getSendBattery();
       nonBlockingDelay(200);
-      getSendMoisture(batteryCharge);
+      getSendMoisture();
       nonBlockingDelay(200);
       getSendTemperature();
       Serial << "Finished stuff, preparing for deep sleep..." << endl;
@@ -299,6 +285,8 @@ void setup() {
   digitalWrite(PIN_BUTTON, HIGH);
 
   Homie.setLoggingPrinter(&Serial);
+
+  fuelGauge.begin();
 
   // Set up default values for settings
   temperatureIntervalSetting.setDefaultValue(DEFAULT_DEEP_SLEEP_MINUTES)
@@ -362,6 +350,10 @@ void setup() {
             .setName("Battery RAW value")
             .setDatatype("float")
             .setUnit("");  
+  sensorNode.advertise("batteryvoltage")
+            .setName("Battery voltage value")
+            .setDatatype("float")
+            .setUnit(""); 
 
   // Define event handler
   Homie.onEvent(onHomieEvent);
@@ -384,10 +376,15 @@ void setup() {
   Wire.write(byte(0x01));           // sends instruction byte
   Wire.write(0x60);                 // sends potentiometer value byte
   Wire.endTransmission();           // stop transmitting
-  
+
+ 
+  fuelGauge.quickstart();
+
   analogWriteFreq(40000);
   analogWrite(PIN_CLK, 400);
 }
+
+
 
 /*
  * Function: loop
