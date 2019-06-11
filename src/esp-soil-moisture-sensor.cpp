@@ -42,25 +42,19 @@ const char *__FLAGGED_FW_VERSION = "\x6a\x3f\x3e\x0e\xe1" FW_VERSION "\xb0\x30\x
 const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
 // use led or not - the led is good for debugging, but not for battery life
 const bool DEFAULT_USE_LED = true;
-// VCC raw reading @3.0V
-const int DEFAULT_VCC_READING_3V = 958;
 // Moisture wet reading @3.0V
 const int DEFAULT_MOIST_WET_READING_AT_3V = 540;
 // Moisture dry reading @3.0V
 const int DEFAULT_MOIST_DRY_READING_AT_3V = 792;
 
-// Value range for VCC Readings from 3.0 V to 2.5 V
-const int VCC_READING_RANGE = 166;
-
 // homie node
 HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
 
 // homie settings
-HomieSetting<long> temperatureIntervalSetting("temperatureInterval", "The sleep duration in minutes (Maximum 71 minutes)");
+HomieSetting<long> sleepDurationSetting("sleepDuration", "The sleep duration in minutes (Maximum 71 minutes)");
 HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
-HomieSetting<long> vccReading3VSetting("vccReading3V", "Battery RAW sensor reading at 3V");
-HomieSetting<long> moistDryReadingAt3VSetting("moistDryReadingAt3V", "Moisture sensor reading dry at 3V VCC");
-HomieSetting<long> moistWetReadingAt3VSetting("moistWetReadingAt3V", "Moisture sensor reading submerged in water at 3V VCC");
+HomieSetting<long> moistDryReadingAt3VSetting("moistDryReadingAt3V", "Moisture sensor reading dry at 3.3V VCC");
+HomieSetting<long> moistWetReadingAt3VSetting("moistWetReadingAt3V", "Moisture sensor reading submerged in water at 3.3V VCC");
 
 // Pin settings
 const int PIN_CLK    = D5;
@@ -158,7 +152,7 @@ void getSendMoisture() {
   #endif
 
   // Map the moisture to the min and max reading of the sensor
-  moisture = map(moisture_raw, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+  moisture = map(moisture_raw, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 0, 100); // Convert to 0 - 100%, 0=Dry, 100=Wet
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
@@ -180,19 +174,26 @@ void getSendMoisture() {
  * returns: The current battery charge in percent
  */
 void getSendBattery() {
-  if (fuelGauge.isSleeping())
-  {
-    fuelGauge.wake();
-  }
+  // if (uelGauge.isSleeping())
+  // {
+  //   FuelGauge.wake();
+  //     nonBlockingDelay(550); // Device needs 500ms to wake up
+  // }
 
   sensorNode.setProperty("batteryraw").send(String(fuelGauge.adc()));
   sensorNode.setProperty("batteryvoltage").send(String(fuelGauge.voltage()));
   sensorNode.setProperty("battery").send(String(fuelGauge.percent()));
 
-  if (!fuelGauge.isSleeping())
-  {
-    fuelGauge.sleep();
-  }
+  // set i2c lines to low
+ // digitalWrite(SDA, LOW);
+ // digitalWrite(SCL, LOW);  
+  // send device to sleep
+ // nonBlockingDelay(2500);
+
+  // if (!FuelGauge.isSleeping())
+  // {
+  //   FuelGauge.sleep();
+  // }
 }
 
 /* 
@@ -255,7 +256,7 @@ void onHomieEvent(const HomieEvent& event) {
       break;
     case HomieEventType::READY_TO_SLEEP:
       Serial << "Ready to sleep" << endl;
-      Homie.doDeepSleep(temperatureIntervalSetting.get() * 60 * 1000 * 1000);
+      Homie.doDeepSleep(sleepDurationSetting.get() * 60 * 1000 * 1000);
       break;
   }
 }
@@ -286,22 +287,16 @@ void setup() {
 
   Homie.setLoggingPrinter(&Serial);
 
-  fuelGauge.begin();
-
   // Set up default values for settings
-  temperatureIntervalSetting.setDefaultValue(DEFAULT_DEEP_SLEEP_MINUTES)
-                            .setValidator([] (long candidate) {
-                              // 72 Minutes is the maximum sleep time supported
-                              // by ESP8266 https://thingpulse.com/max-deep-sleep-for-esp8266/
-                              return candidate > 0 && candidate <= 70;
-                            });
+  sleepDurationSetting.setDefaultValue(DEFAULT_DEEP_SLEEP_MINUTES)
+                      .setValidator([] (long candidate) {
+                        // 72 Minutes is the maximum sleep time supported
+                        // by ESP8266 https://thingpulse.com/max-deep-sleep-for-esp8266/
+                        return candidate > 0 && candidate <= 72;
+                      });
 
   useLEDSetting.setDefaultValue(DEFAULT_USE_LED);
 
-  vccReading3VSetting.setDefaultValue(DEFAULT_VCC_READING_3V)
-              .setValidator([] (long candidate) {
-                return candidate > 0 && candidate <= 1024;                
-              });
   moistDryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;                
@@ -369,7 +364,9 @@ void setup() {
   Homie.setup();
   // Setup I2C library
   Wire.begin();
-
+  // Disable pullups
+  digitalWrite(SCL, LOW);
+  digitalWrite(SDA, LOW);
 
   // device address is specified in datasheet
   Wire.beginTransmission(TMP_ADDR); // transmit to device #44 (0x2c)
