@@ -55,7 +55,7 @@ const int VCC_READING_RANGE = 166;
 HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
 
 // homie settings
-HomieSetting<long> sleepDurationSetting("temperatureInterval", "The sleep duration in minutes (Maximum 71 minutes)");
+HomieSetting<long> sleepDurationSetting("sleepDuration", "The sleep duration in minutes (Maximum 71 minutes)");
 HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
 HomieSetting<long> vccReading3VSetting("vccReading3V", "Battery RAW sensor reading at 3V");
 HomieSetting<long> moistDryReadingAt3VSetting("moistDryReadingAt3V", "Moisture sensor reading dry at 3V VCC");
@@ -302,11 +302,11 @@ void setup() {
 
   // Set up default values for settings
   sleepDurationSetting.setDefaultValue(DEFAULT_DEEP_SLEEP_MINUTES)
-                            .setValidator([] (long candidate) {
-                              // 72 Minutes is the maximum sleep time supported
-                              // by ESP8266 https://thingpulse.com/max-deep-sleep-for-esp8266/
-                              return candidate > 0 && candidate <= 70;
-                            });
+                      .setValidator([] (long candidate) {
+                        // 72 Minutes is the maximum sleep time supported
+                        // by ESP8266 https://thingpulse.com/max-deep-sleep-for-esp8266/
+                        return candidate > 0 && candidate <= 72;
+                      });
 
   useLEDSetting.setDefaultValue(DEFAULT_USE_LED);
 
@@ -314,10 +314,12 @@ void setup() {
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;                
               });
+
   moistDryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;                
               });
+
   moistWetReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_WET_READING_AT_3V)
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;                
@@ -348,7 +350,7 @@ void setup() {
             .setUnit("%");
   sensorNode.advertise("moistureraw")
             .setName("Moisture RAW value")
-            .setDatatype("float")
+            .setDatatype("integer")
             .setUnit("");  
   sensorNode.advertise("temperature")
             .setName("Temperature")
@@ -360,7 +362,7 @@ void setup() {
             .setUnit("%");
   sensorNode.advertise("batteryraw")
             .setName("Battery RAW value")
-            .setDatatype("float")
+            .setDatatype("integer")
             .setUnit("");  
 
   // Define event handler

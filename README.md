@@ -82,19 +82,19 @@ tests showed, that the sensor stops working realiable below 2.5V.
 
 Next test was to measure the moisture sensor at its nominal voltage 3V and 2.5V.
 
-| @3.0V     | Moist   0% | Moist 100% | Corrected 0% | Corrected 0% |
-|-----------|-----------:|-----------:|-------------:|-------------:|
-| Sensor #1 | 568        | 746        |              |              |
-| Sensor #2 | 505        | 712        |              |              |
-| Sensor #3 | 546        | 724        |              |              |
-| **Avg**   | **540**    | **727**    | **540**      | **727**      |
+| @3.0V     | Moist 100% | Moist   0% | Corrected 100% | Corrected 0% |
+|-----------|-----------:|-----------:|---------------:|-------------:|
+| Sensor #1 | 568        | 746        |                |              |
+| Sensor #2 | 505        | 712        |                |              |
+| Sensor #3 | 546        | 724        |                |              |
+| **Avg**   | **540**    | **727**    | **540**        | **727**      |
 
-| @2.5V     | Moist   0% | Moist 100% | Corrected 0% | Corrected 100% |
-|-----------|-----------:|-----------:|-------------:|---------------:|
-| Sensor #1 | 469        | 610        | 567          | 738            |
-| Sensor #1 | 412        | 580        | 497          | 700            |
-| Sensor #3 | 448        | 589        | 548          | 721            |
-| **Avg**   | **443**    | **593**    | **536**      | **717**        |
+| @2.5V     | Moist 100% | Moist   0% | Corrected 100% | Corrected 0% |
+|-----------|-----------:|-----------:|---------------:|-------------:|
+| Sensor #1 | 469        | 610        | 567            | 738          |
+| Sensor #1 | 412        | 580        | 497            | 700          |
+| Sensor #3 | 448        | 589        | 548            | 721          |
+| **Avg**   | **443**    | **593**    | **536**        | **717**      |
 
 I implemented a simple correction method, that takes the change in battery voltage into
 account. The values can be adjusted to your sensor, if you measure the values. The default
