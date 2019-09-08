@@ -41,7 +41,7 @@ if [[ ! -e "${root_path}/src" ]]; then
 fi
 
 #path for locating the new firmware
-bin_path="${root_path}/.pioenvs/soilmoisture"
+bin_path="${root_path}/.pio/build/soilmoisture"
 
 echo -e "${enhanced}Starting OTA firmware update ${reset}"
 echo -e "build path: ${bin_path}"
