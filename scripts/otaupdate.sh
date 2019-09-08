@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 #---------------------------------------------------------------------
 # Script for updating HomieNode firmware via OTA
 #
@@ -7,7 +7,7 @@
 #
 #   ./otaupdate.sh 192.168.178.10 soil01
 #---------------------------------------------------------------------
-
+set -e
 
 #------------------------------------------------------------------------------
 # main line starts here
@@ -50,7 +50,7 @@ binfile="${bin_path}/firmware.bin"
 
 echo -e "binfile: ${binfile}"
 
-if [[ "$machine" -eq "Mac" ]]; then
+if [ "$machine" == "Mac" ]; then
   md5sum=`md5 -q $binfile | awk '{ print $1 }'`
   base64enc=`base64 $binfile`
 else
