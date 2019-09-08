@@ -161,7 +161,7 @@ void getSendMoisture(int batteryCharge) {
   #endif
 
   // Map the moisture to the min and max reading of the sensor
-  moisture = map(moisture, moistWetReadingAt3VSetting.get(), moistDryReadingAt3VSetting.get(), 100, 0); // Convert to 0 - 100%, 0=Dry, 100=Wet
+  moisture = map(moisture, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 0, 100); // Convert to 0 - 100%, 0=Dry, 100=Wet
 
   #ifdef DEBUG
   Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
