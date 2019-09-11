@@ -312,17 +312,17 @@ void setup() {
 
   vccReading3VSetting.setDefaultValue(DEFAULT_VCC_READING_3V)
               .setValidator([] (long candidate) {
-                return candidate > 0 && candidate <= 1024;                
+                return candidate > 0 && candidate <= 1024;
               });
 
   moistDryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
               .setValidator([] (long candidate) {
-                return candidate > 0 && candidate <= 1024;                
+                return candidate > 0 && candidate <= 1024;
               });
 
   moistWetReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_WET_READING_AT_3V)
               .setValidator([] (long candidate) {
-                return candidate > 0 && candidate <= 1024;                
+                return candidate > 0 && candidate <= 1024;
               });
 
   // Workaround for bug https://github.com/homieiot/homie-esp8266/issues/351
@@ -372,14 +372,13 @@ void setup() {
   if (useLEDSetting.get()) {
     Homie.setLedPin(PIN_LED, 1);
   } else {
-    Homie.disableLedFeedback();    
+    Homie.disableLedFeedback();
   }
 
   // Setup homie
   Homie.setup();
   // Setup I2C library
   Wire.begin();
-
 
   // device address is specified in datasheet
   Wire.beginTransmission(TMP_ADDR); // transmit to device #44 (0x2c)

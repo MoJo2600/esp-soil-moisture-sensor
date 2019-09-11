@@ -5,7 +5,7 @@
 # Must be executed from the project scripts folder as:
 #	$ ./otaupdate.sh MQTT_BROKER_IP DEVICE_NAME
 #
-#   ./otaupdate.sh 192.168.178.10 soil01
+#   ./otaupdate.sh 192.168.178.10 soil01 
 #---------------------------------------------------------------------
 set -e
 
