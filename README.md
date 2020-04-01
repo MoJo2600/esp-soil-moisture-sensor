@@ -124,6 +124,12 @@ You can now take the following JSON and publish it as a retained message to ```h
 
 The next time the device goes online it will read this configuration and use the values from now on.
 
+## What about Battery life?
+
+One of my sensors was sitting indoors without measuring anything and the battery life was > 210 days on one set of regular AA batteries. You can see the graph here:
+
+![Battery Life](doc/soilbattery.png)
+
 ## OTA - Over the air update
 
 You don't need to collect all your devices and connect a programmer to do a firmware upgrade. You can use the provided
