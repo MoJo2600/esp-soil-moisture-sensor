@@ -10,12 +10,15 @@
 			"PLATFORMIO_CALLER": "vscode"
 		},
 		"terminal.integrated.env.linux": {
-			"PATH": "/home/mojo/.platformio/penv/bin:/home/mojo/.platformio/penv:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/jvm/java-8-oracle/bin:/usr/lib/jvm/java-8-oracle/db/bin:/usr/lib/jvm/java-8-oracle/jre/bin",
+			"PATH": "/home/mojo/.platformio/penv/bin:/home/mojo/.platformio/penv:/home/mojo/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
 			"PLATFORMIO_CALLER": "vscode"
 		},
 		"terminal.integrated.env.osx": {
 			"PATH": "/Users/uid40412/.platformio/penv/bin:/Users/uid40412/.platformio/penv:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/sbin:/opt/flutter/bin",
 			"PLATFORMIO_CALLER": "vscode"
+		},
+		"files.associations": {
+			"*.bak": "cpp"
 		}
 	},
 	"extensions": {
