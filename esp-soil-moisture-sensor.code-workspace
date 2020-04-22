@@ -18,7 +18,9 @@
 			"PLATFORMIO_CALLER": "vscode"
 		},
 		"files.associations": {
-			"*.bak": "cpp"
+			"*.bak": "cpp",
+			"array": "cpp",
+			"string": "cpp"
 		}
 	},
 	"extensions": {

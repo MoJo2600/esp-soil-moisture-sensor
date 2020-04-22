@@ -11,31 +11,27 @@
   <meta name="theme-color" content="#00878f">
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0' name='viewport'>
   <script src="WebSocket.js" type="text/javascript"></script>
+  <script src="jquery-3.3.1.min.js"></script>
+  <script src="GaugeMeter.js"></script>
+  <script>
+    $(document).ready(function(){
+      $(".GaugeMeter").gaugeMeter();
+    });
+  </script>
 </head>
 
 <body>
   <center>
     <header>
-      <h1>LED Control</h1>
+      <h1>Soil Moisture Sensor</h1>
     </header>
     <div>
-      <table>
-        <tr>
-          <td style="width:14.4px; text-align: right">R: </td>
-          <td><input class="enabled" id="r" type="range" min="0" max="1023" step="1" oninput="sendRGB();" value="0"></td>
-        </tr>
-        <tr>
-          <td style="width:14.4px; text-align: right">G: </td>
-          <td><input class="enabled" id="g" type="range" min="0" max="1023" step="1" oninput="sendRGB();" value="0"></td>
-        </tr>
-        <tr>
-          <td style="width:14.4px; text-align: right">B: </td>
-          <td><input class="enabled" id="b" type="range" min="0" max="1023" step="1" oninput="sendRGB();" value="0"></td>
-        </tr>
-      </table>
-      <p style="margin:8px 0px">
-        <button id="rainbow" class="button" style="background-color:#999" onclick="rainbowEffect();">Rainbow</button>
-      </p>
+      <div class="GaugeMeter"
+        id="MoistureMeter"
+        data-min="500"
+        data-total="900"
+        data-label="Moisture RAW">
+      </div>
     </div>
   </center>
 </body>

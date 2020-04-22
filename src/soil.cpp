@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <FS.h>
 #include <WebSocketsServer.h>
+#include <ArduinoJson.h>
 
 ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
 
@@ -94,7 +95,7 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
   Serial.print(ssid);
   Serial.println("\" started\r\n");
 
-  wifiMulti.addAP("TellMyWifiLoveHer", "xxx");   // add Wi-Fi networks you want to connect to
+  wifiMulti.addAP("TellMyWifiLoveHer", "2040791920407919");   // add Wi-Fi networks you want to connect to
   wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
   wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
@@ -128,6 +129,109 @@ void startSPIFFS() { // Start the SPIFFS and list all contents
     }
     Serial.printf("\n");
   }
+}
+
+/*
+ * Function: readSensor
+ * --------------------
+ * Reads the sensor connected to pin PIN_SENSOR
+ * Since the moisture sensor and the battery voltage are
+ * connected to the same input pin, this function can be used
+ * for both tasks.
+ */
+int readSensor() {
+  int total = 0;
+  int rawVal = 0;
+  int ret = 0;
+  int sampleCount = 3;
+
+  for(int i = 0; i < sampleCount; i++){
+    rawVal = analogRead(PIN_SENSOR);
+    #ifdef DEBUG
+    Homie.getLogger() << "Raw Value: " << rawVal << endl;
+    #endif 
+    total += rawVal;
+    nonBlockingDelay(50);
+  }
+
+  ret = int((float)total / (float)sampleCount);
+
+  #ifdef DEBUG
+  Homie.getLogger() << "Result: " << ret << endl;
+  #endif 
+
+  return ret;
+}
+
+
+/* 
+ * Function: getSendMoisture
+ * -------------------------
+ * This function reads the moisture sensor multiple times and takes the average of the readings.
+ * It then publishes this value via MQTT.
+ * 
+ * batteryCharge: The current battery charge
+ * 
+ * Since the reading is related to the battery voltage, a correction is applied to compensate
+ * for this.
+ */
+int getMoisture(int batteryCharge) {
+  // Connect Moisture sensor to the Pin via on PCB switch
+  digitalWrite(PIN_SWITCH, HIGH);
+  nonBlockingDelay(200);
+
+  int moisture = 0;
+  int moist_raw = readSensor();
+  return moist_raw;
+}
+
+/*
+ * Function: getSendBattery
+ * ------------------------
+ * This function reads the battery voltage multiple times and takes the average of the readings.
+ * It then publishes this value via MQTT.
+ *  
+ * returns: The current battery charge in percent
+ */
+int getBattery() {
+  // Connect Battery to the Pin via on PCB switch
+  digitalWrite(PIN_SWITCH, LOW);
+  nonBlockingDelay(200);
+
+  int batteryCharge = 0;
+  int battery_raw = readSensor();
+
+  return battery_raw;
+}
+
+/* 
+ * Function: getSendTemperature
+ * ----------------------------
+ * This function reads the temprature over i2c bus.
+ * It then publishes this value via MQTT.
+ */
+float getTemperature() {
+  float temperature = 0.0;
+  
+  // Begin transmission
+  Wire.beginTransmission(TMP_ADDR);
+  // Select Data Registers
+  Wire.write(0X00);
+  // End Transmission
+  Wire.endTransmission();
+ 
+  // Request 2 bytes , Msb first to get temperature
+  Wire.requestFrom(TMP_ADDR, 2);
+  // Read temperature as Celsius (the default)
+  if(Wire.available() == 2) {
+    int msb = Wire.read();
+    int lsb = Wire.read();
+
+    int rawtmp = msb << 8 | lsb;
+    int value = rawtmp >> 4;
+    temperature = value * 0.0625;
+  }
+  return temperature;
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) { // When a WebSocket message is received
@@ -182,6 +286,7 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
   Serial.println("HTTP server started.");
 }
 
+
 void setup() {
   Serial.begin(74880);
   delay(10);
@@ -226,7 +331,42 @@ void setup() {
   startServer();               // Start a HTTP server with a file read handler and an upload handler
 }
 
+unsigned long previousMillis = 0;        // will store last time LED was updated
+
 void loop() {
+
+  unsigned long now = millis();
+
   webSocket.loop();                           // constantly check for websocket events
-  server.handleClient();                      // run the server 
+  server.handleClient();                      // run the server
+
+  int battery_raw = 0;
+
+  char cstr[16];
+  char dstr[8];
+
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= 3000)
+  {
+    previousMillis = currentMillis;
+    // creat JSON message for Socket.IO (event)
+    DynamicJsonDocument doc(1024);
+
+    battery_raw = getBattery();
+    doc["battery"] = battery_raw;
+    doc["temperature"] = getTemperature();
+    doc["moisture"] = getMoisture(battery_raw);
+
+    // webSocket.broadcastTXT(itoa(battery_raw, cstr, 10));
+    // webSocket.broadcastTXT(itoa(getTemperature(), cstr, 10));
+    // dtostrf(getMoisture(battery_raw), 6, 2, dstr);
+
+    // JSON to String (serializion)
+    String output;
+    serializeJson(doc, output);
+
+    webSocket.broadcastTXT(output);
+    now = millis();
+  }
 }
