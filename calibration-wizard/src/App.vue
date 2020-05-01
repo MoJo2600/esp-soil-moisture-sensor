@@ -27,14 +27,18 @@
 
       <v-spacer></v-spacer>
 
-      <v-btn
+      <!-- <v-btn
         href="https://github.com/vuetifyjs/vuetify/releases/latest"
         target="_blank"
         text
-      >
-        <span class="mr-2">Latest Release</span>
-        <v-icon>mdi-open-in-new</v-icon>
-      </v-btn>
+      > -->
+        <v-icon>mdi-thermometer</v-icon>
+        <span class="mr-2">{{ temperature }} °C</span>
+
+        <v-icon>mdi-battery</v-icon>
+        <span class="mr-2">{{ battery }}</span>
+        
+      <!-- </v-btn> -->
     </v-app-bar>
 
     <v-content>
@@ -54,7 +58,16 @@ export default {
   },
 
   data: () => ({
-    //
+    battery: 0,
+    temperature: 0,
   }),
+
+  mounted: function() {
+    this.$options.sockets.onmessage = message => {
+      const jsonData = JSON.parse(message.data);
+      this.battery = jsonData.battery;
+      this.temperature = jsonData.temperature;
+    }
+  }
 };
 </script>
