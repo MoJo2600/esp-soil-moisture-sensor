@@ -35,7 +35,7 @@
         <v-icon>mdi-thermometer</v-icon>
         <span class="mr-2">{{ temperature }} °C</span>
 
-        <v-icon>mdi-battery</v-icon>
+        <v-icon :color="batteryIconColor">{{ batteryIconName }}</v-icon>
         <span class="mr-2">{{ battery }}</span>
         
       <!-- </v-btn> -->
@@ -60,7 +60,24 @@ export default {
   data: () => ({
     battery: 0,
     temperature: 0,
+    batteryIconColor: 'red',
+    batteryIconName: 'mdi-battery-low'
   }),
+
+  watch: {
+    'battery': function(val) {
+      if (val > 880) {
+        this.batteryIconColor = '';
+        this.batteryIconName = 'mdi-battery-high';
+      } else if (val > 810) {
+        this.batteryIconColor = 'yellow';
+        this.batteryIconName = 'mdi-battery-medium';
+      } else {
+        this.batteryIconColor = 'red';
+        this.batteryIconName = 'mdi-battery-low';
+      }
+    }
+  },
 
   mounted: function() {
     this.$options.sockets.onmessage = message => {

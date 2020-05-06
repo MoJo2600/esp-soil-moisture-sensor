@@ -227,9 +227,16 @@ float getTemperature() {
     int msb = Wire.read();
     int lsb = Wire.read();
 
-    int rawtmp = msb << 8 | lsb;
-    int value = rawtmp >> 4;
-    temperature = value * 0.0625;
+		// Convert the data to 12-bits
+		int temp = (lsb * 256 + msb) / 16;
+		if(temp > 2047)
+		{
+			temp -= 4096;
+		}
+
+    //int rawtmp = msb << 8 | lsb;
+    //int value = rawtmp >> 4;
+    temperature = temp * 0.0625;
   }
   return temperature;
 }
@@ -347,7 +354,7 @@ void loop() {
 
   unsigned long currentMillis = millis();
 
-  if (currentMillis - previousMillis >= 3000)
+  if (currentMillis - previousMillis >= 2000)
   {
     previousMillis = currentMillis;
     // creat JSON message for Socket.IO (event)
