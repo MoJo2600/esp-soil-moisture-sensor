@@ -82,7 +82,7 @@ export default {
   mounted: function() {
     this.$options.sockets.onmessage = message => {
       const jsonData = JSON.parse(message.data);
-      this.battery = jsonData.battery;
+      this.battery = jsonData.battery_raw;
       this.temperature = jsonData.temperature;
     }
   }

@@ -4820,6 +4820,11 @@ jest-worker@^25.4.0:
     merge-stream "^2.0.0"
     supports-color "^7.0.0"
 
+jqwidgets-scripts@^9.1.4:
+  version "9.1.4"
+  resolved "https://registry.yarnpkg.com/jqwidgets-scripts/-/jqwidgets-scripts-9.1.4.tgz#e04a280681bb341e661d29b6b97530e0d54e4c1c"
+  integrity sha512-SOGgSDBAZvzonUjEZ/QugzQUV3So+P4YaPEHdTqIo+KfhHNUtA5iRQajdsQDoyGfAsdoSGYY2E8FzMCrvVIgxQ==
+
 js-base64@^2.1.8:
   version "2.5.2"
   resolved "https://registry.yarnpkg.com/js-base64/-/js-base64-2.5.2.tgz#313b6274dda718f714d00b3330bbae6e38e90209"
@@ -8615,7 +8620,7 @@ webpack-sources@^1.1.0, webpack-sources@^1.4.0, webpack-sources@^1.4.1, webpack-
     source-list-map "^2.0.0"
     source-map "~0.6.1"
 
-webpack@^4.0.0:
+webpack@^4.0.0, webpack@^4.43.0:
   version "4.43.0"
   resolved "https://registry.yarnpkg.com/webpack/-/webpack-4.43.0.tgz#c48547b11d563224c561dad1172c8aa0b8a678e6"
   integrity sha512-GW1LjnPipFW2Y78OOab8NJlCflB7EFskMih2AHdvjbpKMeDJqEgSx24cXXXiPS65+WSwVyxtDsJH6jGX2czy+g==
