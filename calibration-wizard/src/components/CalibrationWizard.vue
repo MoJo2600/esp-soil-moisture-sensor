@@ -83,14 +83,6 @@
           <v-stepper-step step="4">Done</v-stepper-step>
           <v-stepper-content step="4">
             <v-row>
-              <v-col>
-                Moisture reading: {{ this.moisture_raw }}
-              </v-col>
-              <v-col>
-                Battery reading: {{ this.battery_raw }}
-              </v-col>
-            </v-row>
-            <v-row>
               <v-col cols="6">
                 <JqxGauge
                   v-if="calibrationComplete"
@@ -126,6 +118,15 @@
                 </JqxLinearGauge>
               </v-col>
             </v-row>
+            <v-row>
+              <v-col>
+                Moisture reading: <b>{{ this.moisture_raw }}</b>
+              </v-col>
+              <v-col>
+                Battery reading: <b>{{ this.battery_raw }}</b>
+              </v-col>
+            </v-row>
+
             <v-btn color="primary" @click="stepper = 1">Save and restart to Homie</v-btn>
           </v-stepper-content>
         </v-stepper>
@@ -245,8 +246,6 @@ export default {
 
       if (this.$refs.moistureGauge) {
         this.$refs.moistureGauge.value = jsonData.moisture_raw;
-        // this.$refs.moistureGauge.caption = { offset: [0, -25], value: `Moisture: ${jsonData.moisture_raw}`, position: 'bottom' };
-
       }
 
       if (this.$refs.moistureGauge) {
