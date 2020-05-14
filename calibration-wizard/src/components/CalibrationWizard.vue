@@ -154,9 +154,9 @@ export default {
     // lables: [],
     // style: "",
     // caption: "caption",
-    calibrationComplete: true,
+    calibrationComplete: false,
     sampleCount: 3,
-    stepper: 4,
+    stepper: 1,
     showDryMeasureResult: false,
     showMoistMeasureResult: false,
     measureDialog: false,
@@ -190,11 +190,10 @@ export default {
     batteryTicksMinor: { size: '5%', interval: 25, style: { 'stroke-width': 1, stroke: '#aaaaaa' } },
     batteryTicksMajor: { size: '10%', interval: 100 },
     batteryRanges: [
-        { startValue: 0, endValue: 500, style: { fill: '#FF4800', stroke: '#FF4800' } },
-        { startValue: 500, endValue: 800, style: { fill: '#FFA200', stroke: '#FFA200' } },
-        { startValue: 800, endValue: 1024, style: { fill: '#228B22', stroke: '#228B22' } }
+        { startValue: 800, endValue: 855, style: { fill: '#FF4800', stroke: '#FF4800' } },
+        { startValue: 855, endValue: 900, style: { fill: '#FFA200', stroke: '#FFA200' } },
+        { startValue: 900, endValue: 960, style: { fill: '#228B22', stroke: '#228B22' } }
     ]
-
   }),
 
   beforeCreate: function () {

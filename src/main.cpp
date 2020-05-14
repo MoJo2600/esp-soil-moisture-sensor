@@ -1,24 +1,64 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-#include <ArduinoOTA.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
+/* Soil Moisture Monitor.
+  
+  Hardware ESP8266 Soil Moisture Probe V2.2 (NodeMcu1.0).
+  https://wiki.aprbrother.com/en/ESP_Soil_Moisture_Sensor.html
+
+  Implemented Homie https://homieiot.github.io/ to send messages to MQTT
+
+  Made by Christian Erhardt 2019/04/21
+  Based on the great work of Ve2Cuz Real Drouin - https://www.qsl.net/v/ve2cuz//garden/
+
+  ///////// Pin Assigment ///////
+
+  A0  Input Soil Moisture and Battery
+  GPIO4   SDA for tmp112
+  GPIO5   SCL for tmp112
+  GPIO12  Button S1 (For Homie configuration reset)
+  GPIO13  LED
+  GPIO14  Clock Output for soil moisture sensor
+  GPIO15  SWITCH for measuring Soil Moisture or Battery Voltage
+
+  //////////////////////////////////////////////////////////////////////
+*/
+#include <Arduino.h>
+#include <Homie.h>
 #include <Wire.h>
-#include <FS.h>
-#include <WebSocketsServer.h>
-#include <ArduinoJson.h>
+#include <Timer.h>
+#include <sensor.h>
+#include <wizard.h>
 
-ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
+// if you want to have verbose output, uncomment this:
+#define DEBUG
 
-ESP8266WebServer server(80);       // Create a webserver object that listens for HTTP request on port 80
-WebSocketsServer webSocket(81);    // create a websocket server on port 81
+#define FW_NAME "esp-soil-moisture-sensor"
+#define FW_VERSION "2.0.0"
 
-File fsUploadFile;                 // a File variable to temporarily store the received file
+/* Magic sequence for Autodetectable Binary Upload */
+const char *__FLAGGED_FW_NAME = "\xbf\x84\xe4\x13\x54" FW_NAME "\x93\x44\x6b\xa7\x75";
+const char *__FLAGGED_FW_VERSION = "\x6a\x3f\x3e\x0e\xe1" FW_VERSION "\xb0\x30\x48\xd4\x1a";
+/* End of magic sequence for Autodetectable Binary Upload */
 
-const char *ssid = "soilmoisture"; // The name of the Wi-Fi network that will be created
-const char *password = "";   // The password required to connect to it, leave blank for an open network
+// DEFAULT SETTINGS
+// sleep time in microseconds
+const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
+// use led or not - the led is good for debugging, but not for battery life
+const bool DEFAULT_USE_LED = true;
+// start calibration wizard or not - when checked, a validation wizard will be started
+const bool DEFAULT_START_CALIBRATION = false;
+// Moisture dry reading @3.0V
+const int DEFAULT_MOIST_DRY_READING_AT_3V = 720;
+// Moisture wet reading @3.0V
+const int DEFAULT_MOIST_WET_READING_AT_3V = 520;
 
-const char* mdnsName = "esp8266"; // Domain name for the mDNS responder
+// homie node
+HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
+
+// homie settings
+HomieSetting<bool> startCalibrationSetting("startCalibration", "When checked, the device will start a calibration wizard at http://moistsensor.local");
+HomieSetting<long> sleepDurationSetting("sleepDuration", "The sleep duration in minutes (Maximum 71 minutes)");
+HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
+HomieSetting<long> moistDryReadingAt3VSetting("moistDryReadingAt3V", "Moisture sensor reading dry at 3V VCC");
+HomieSetting<long> moistWetReadingAt3VSetting("moistWetReadingAt3V", "Moisture sensor reading submerged in water at 3V VCC");
 
 // Pin settings
 const int PIN_CLK    = D5;
@@ -26,143 +66,55 @@ const int PIN_SENSOR = A0;
 const int PIN_LED    = D7;
 const int PIN_SWITCH = D8;
 const int PIN_BUTTON = D6;
+
 // I2C address for temperature sensor
 const int TMP_ADDR  = 0x48;
-unsigned long time_now = 0;
+
+// Timer to prepare to sleep
+Timer sleepTimer;
+
+bool run_wizard = false;
 
 /*
- * Function: nonBlockingDelay
- * --------------------------
- * A delay function that will not block the cpu like delay() does.
- */
-void nonBlockingDelay(int waitmillis) {
-  time_now = millis();
-  while(millis() < time_now + waitmillis) {
-    //wait without stopping the cpu
-    yield();
-  }
+* Function: prepareToSleep
+* ------------------------
+* Callback to tell homie to prepare to sleep
+*/
+void prepareSleep() {
+  Homie.prepareToSleep();
 }
 
-String formatBytes(size_t bytes) { // convert sizes in bytes to KB and MB
-  if (bytes < 1024) {
-    return String(bytes) + "B";
-  } else if (bytes < (1024 * 1024)) {
-    return String(bytes / 1024.0) + "KB";
-  } else if (bytes < (1024 * 1024 * 1024)) {
-    return String(bytes / 1024.0 / 1024.0) + "MB";
-  }
-}
+// /*
+//  * Function: readSensor
+//  * --------------------
+//  * Reads the sensor connected to pin PIN_SENSOR
+//  * Since the moisture sensor and the battery voltage are
+//  * connected to the same input pin, this function can be used
+//  * for both tasks.
+//  */
+// int readSensor() {
+//   int total = 0;
+//   int rawVal = 0;
+//   int ret = 0;
+//   int sampleCount = 3;
 
-String getContentType(String filename) { // determine the filetype of a given filename, based on the extension
-  if (filename.endsWith(".html")) return "text/html";
-  else if (filename.endsWith(".css")) return "text/css";
-  else if (filename.endsWith(".js")) return "application/javascript";
-  else if (filename.endsWith(".ico")) return "image/x-icon";
-  else if (filename.endsWith(".gz")) return "application/x-gzip";
-  return "text/plain";
-}
+//   for(int i = 0; i < sampleCount; i++){
+//     rawVal = analogRead(PIN_SENSOR);
+//     #ifdef DEBUG
+//     Homie.getLogger() << "Raw Value: " << rawVal << endl;
+//     #endif 
+//     total += rawVal;
+//     nonBlockingDelay(50);
+//   }
 
+//   ret = int((float)total / (float)sampleCount);
 
-bool handleFileRead(String path) { // send the right file to the client (if it exists)
-  Serial.println("handleFileRead: " + path);
-  if (path.endsWith("/")) path += "index.html";          // If a folder is requested, send the index file
-  String contentType = getContentType(path);             // Get the MIME type
-  String pathWithGz = path + ".gz";
-  if (SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) { // If the file exists, either as a compressed archive, or normal
-    if (SPIFFS.exists(pathWithGz))                         // If there's a compressed version available
-      path += ".gz";                                         // Use the compressed verion
-    File file = SPIFFS.open(path, "r");                    // Open the file
-    size_t sent = server.streamFile(file, contentType);    // Send it to the client
-    file.close();                                          // Close the file again
-    Serial.println(String("\tSent file: ") + path);
-    return true;
-  }
-  Serial.println(String("\tFile Not Found: ") + path);   // If the file doesn't exist, return false
-  return false;
-}
+//   #ifdef DEBUG
+//   Homie.getLogger() << "Result: " << ret << endl;
+//   #endif 
 
-void handleNotFound(){ // if the requested file or page doesn't exist, return a 404 not found error
-  if(!handleFileRead(server.uri())){          // check if the file exists in the flash memory (SPIFFS), if so, send it
-    server.send(404, "text/plain", "404: File Not Found");
-  }
-}
-
-// -------------------------------
-
-void startWiFi() { // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
-  WiFi.softAP(ssid, password);             // Start the access point
-  Serial.print("Access Point \"");
-  Serial.print(ssid);
-  Serial.println("\" started\r\n");
-
-  wifiMulti.addAP("TellMyWifiLoveHer", "2040791920407919");   // add Wi-Fi networks you want to connect to
-  wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
-
-  Serial.println("Connecting");
-  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect
-    delay(250);
-    Serial.print('.');
-  }
-  Serial.println("\r\n");
-  if(WiFi.softAPgetStationNum() == 0) {      // If the ESP is connected to an AP
-    Serial.print("Connected to ");
-    Serial.println(WiFi.SSID());             // Tell us what network we're connected to
-    Serial.print("IP address:\t");
-    Serial.print(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
-  } else {                                   // If a station is connected to the ESP SoftAP
-    Serial.print("Station connected to ESP8266 AP");
-  }
-  Serial.println("\r\n");
-}
-
-
-void startSPIFFS() { // Start the SPIFFS and list all contents
-  SPIFFS.begin();                             // Start the SPI Flash File System (SPIFFS)
-  Serial.println("SPIFFS started. Contents:");
-  {
-    Dir dir = SPIFFS.openDir("/");
-    while (dir.next()) {                      // List the file system contents
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();
-      Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
-    }
-    Serial.printf("\n");
-  }
-}
-
-/*
- * Function: readSensor
- * --------------------
- * Reads the sensor connected to pin PIN_SENSOR
- * Since the moisture sensor and the battery voltage are
- * connected to the same input pin, this function can be used
- * for both tasks.
- */
-int readSensor() {
-  int total = 0;
-  int rawVal = 0;
-  int ret = 0;
-  int sampleCount = 3;
-
-  for(int i = 0; i < sampleCount; i++){
-    rawVal = analogRead(PIN_SENSOR);
-    #ifdef DEBUG
-    Homie.getLogger() << "Raw Value: " << rawVal << endl;
-    #endif 
-    total += rawVal;
-    nonBlockingDelay(50);
-  }
-
-  ret = int((float)total / (float)sampleCount);
-
-  #ifdef DEBUG
-  Homie.getLogger() << "Result: " << ret << endl;
-  #endif 
-
-  return ret;
-}
-
+//   return ret;
+// }
 
 /* 
  * Function: getSendMoisture
@@ -175,14 +127,39 @@ int readSensor() {
  * Since the reading is related to the battery voltage, a correction is applied to compensate
  * for this.
  */
-int getMoisture() {
-  // Connect Moisture sensor to the Pin via on PCB switch
-  digitalWrite(PIN_SWITCH, HIGH);
-  nonBlockingDelay(200);
+void getSendMoisture(int batteryCharge) {
+  // // Connect Moisture sensor to the Pin via on PCB switch
+  // digitalWrite(PIN_SWITCH, HIGH);
+  // nonBlockingDelay(200);
 
   int moisture = 0;
-  int moist_raw = readSensor();
-  return moist_raw;
+  int moist_raw = getMoisture(PIN_SWITCH, PIN_SENSOR);
+  //  readSensor();
+  sensorNode.setProperty("moistureraw").send(String(moist_raw));
+
+  #ifdef DEBUG
+  Homie.getLogger() << "Moisture raw: " << moist_raw << endl;
+  #endif
+
+  // Battery Drop Correction to normalize to reading at 3.0V
+  moisture = 960 * moist_raw / batteryCharge;
+
+  #ifdef DEBUG
+  Homie.getLogger() << "Moisture after battery correction: " << moisture << endl;
+  #endif
+
+  // Map the moisture to the min and max reading of the sensor
+  moisture = map(moisture, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 0, 100); // Convert to 0 - 100%, 0=Dry, 100=Wet
+
+  #ifdef DEBUG
+  Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
+  #endif
+
+  if (moisture > 100) moisture = 100;
+  if (moisture <  0) moisture = 0;
+
+  Homie.getLogger() << "Moisture: " << moisture << endl;
+  sensorNode.setProperty("moisture").send(String(moisture));
 }
 
 /*
@@ -193,13 +170,30 @@ int getMoisture() {
  *  
  * returns: The current battery charge in percent
  */
-int getBattery() {
+int getSendBattery() {
   // Connect Battery to the Pin via on PCB switch
-  digitalWrite(PIN_SWITCH, LOW);
-  nonBlockingDelay(200);
+  // digitalWrite(PIN_SWITCH, LOW);
+  // nonBlockingDelay(200);
 
   int batteryCharge = 0;
-  int battery_raw = readSensor();
+  int battery_raw = getBattery(PIN_SWITCH, PIN_SENSOR);
+  // readSensor();
+  sensorNode.setProperty("batteryraw").send(String(battery_raw));
+
+  batteryCharge = map(battery_raw, 800, 1000, 0, 100);
+
+  #ifdef DEBUG
+  Homie.getLogger() << "Battery charge after mapping: " << batteryCharge << endl;
+  #endif
+ 
+  // if (batteryCharge > 100) batteryCharge = 100;
+  // if (batteryCharge < 0) batteryCharge = 0;
+  
+  #ifdef DEBUG
+  Homie.getLogger() << "Battery: " << batteryCharge << " %" << endl;
+  #endif
+
+  sensorNode.setProperty("battery").send(String(batteryCharge));
 
   return battery_raw;
 }
@@ -210,10 +204,9 @@ int getBattery() {
  * This function reads the temprature over i2c bus.
  * It then publishes this value via MQTT.
  */
-float getTemperature() {
-  uint8_t temp[2];
-  int16_t tempc;
-
+void getSendTemperature() {
+  float temperature = 0.0;
+  
   // Begin transmission
   Wire.beginTransmission(TMP_ADDR);
   // Select Data Registers
@@ -225,75 +218,61 @@ float getTemperature() {
   Wire.requestFrom(TMP_ADDR, 2);
   // Read temperature as Celsius (the default)
   if(Wire.available() == 2) {
-    temp[0] = Wire.read();
-    temp[1] = Wire.read();
+    int msb = Wire.read();
+    int lsb = Wire.read();
 
-		// Convert the data to 12-bits
-    // ignore the lower 4 bits of byte 2
-    temp[1]  = temp[1]  >> 4; 
-    // combine to make one 12 bit binary number
-    tempc = ((temp[0] << 4) | temp[1]);
+    int rawtmp = msb << 8 | lsb;
+    int value = rawtmp >> 4;
+    temperature = value * 0.0625;
+  }
+ 
+  #ifdef DEBUG
+  Homie.getLogger() << "Temperature: " << temperature << " °C" << endl;
+  #endif
 
-    return round((tempc * 0.0625) * 100.0) / 100.0;
+  sensorNode.setProperty("temperature").send(String(temperature));
+}
+
+/*
+ * Function: onHomieEvent
+ * ----------------------
+ * This function handles homie events.
+ * To finish all tasks before deep sleep, we are waiting for the MQTT_READY
+ * event. Then we will read all sensors and publish the values. After this we
+ * call `prepareToSleep()`. When homie has finished all tasks, the event
+ * READY_TO_SLEEP is raised. This is when we send the controller to sleep for
+ * the configured time.
+ */
+void onHomieEvent(const HomieEvent& event) {
+  float batteryCharge = 0.0;
+  switch(event.type) {
+    case HomieEventType::MQTT_READY:    
+      Serial << "MQTT connected, doing stuff..." << endl;
+      batteryCharge = getSendBattery();
+      nonBlockingDelay(200);
+      getSendMoisture(batteryCharge);
+      nonBlockingDelay(200);
+      getSendTemperature();
+      Serial << "Finished stuff, preparing for deep sleep..." << endl;
+      sleepTimer.after(100, prepareSleep);
+      break;
+    case HomieEventType::READY_TO_SLEEP:
+      Serial << "Ready to sleep" << endl;
+      Homie.doDeepSleep(sleepDurationSetting.get() * 60 * 1000 * 1000);
+      break;
   }
 }
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) { // When a WebSocket message is received
-  switch (type) {
-    case WStype_DISCONNECTED:             // if the websocket is disconnected
-      Serial.printf("[%u] Disconnected!\n", num);
-      break;
-    case WStype_CONNECTED: {              // if a new websocket connection is established
-        IPAddress ip = webSocket.remoteIP(num);
-        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-        // rainbow = false;                  // Turn rainbow off when a new connection is established
-      }
-      break;
-    case WStype_TEXT:                     // if new text data is received
-      Serial.printf("[%u] get Text: %s\n", num, payload);
-    //   if (payload[0] == '#') {            // we get RGB data
-    //     uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
-    //     int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
-    //     int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
-    //     int b =          rgb & 0x3FF;                      // B: bits  0-9
-
-    //     analogWrite(LED_RED,   r);                         // write it to the LED output pins
-    //     analogWrite(LED_GREEN, g);
-    //     analogWrite(LED_BLUE,  b);
-    //   } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
-    //     rainbow = true;
-    //   } else if (payload[0] == 'N') {                      // the browser sends an N when the rainbow effect is disabled
-    //     rainbow = false;
-    //   }
-      break;
-  }
-}
-
-void startWebSocket() { // Start a WebSocket server
-  webSocket.begin();                          // start the websocket server
-  webSocket.onEvent(webSocketEvent);          // if there's an incomming websocket message, go to function 'webSocketEvent'
-  Serial.println("WebSocket server started.");
-}
-
-void startMDNS() { // Start the mDNS responder
-  MDNS.begin(mdnsName);                        // start the multicast domain name server
-  Serial.print("mDNS responder started: http://");
-  Serial.print(mdnsName);
-  Serial.println(".local");
-}
-
-void startServer() { // Start a HTTP server with a file read handler and an upload handler
-  server.onNotFound(handleNotFound);          // if someone requests any other file or page, go to function 'handleNotFound'
-                                              // and check if the file exists
-
-  server.begin();                             // start the HTTP server
-  Serial.println("HTTP server started.");
-}
-
-
+/*
+ * Function: setup
+ * ---------------
+ * Default arduino setup handler. We prepare the whole environment here.
+ */
 void setup() {
   Serial.begin(74880);
   delay(10);
+  Serial << endl << endl;
+  Serial << "Entering Setup" << endl;
 
   // Prepare pins
   pinMode(PIN_CLK, OUTPUT);
@@ -301,7 +280,6 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_SWITCH, OUTPUT);
   pinMode(PIN_BUTTON, INPUT);
-
   // Set GPIO16 (=D0) pin mode to allow for deep sleep
   // Connect D0 to RST for this to work.
   pinMode(D0, WAKEUP_PULLUP);
@@ -313,66 +291,106 @@ void setup() {
   // Setup I2C library
   Wire.begin();
 
-  // device address is specified in datasheet
-  Wire.beginTransmission(TMP_ADDR); // transmit to device #44 (0x2c)
-  Wire.write(byte(0x01));           // sends instruction byte
-  Wire.write(0x60);                 // sends potentiometer value byte
-  Wire.endTransmission();           // stop transmitting
+  initializeTemperatureSensor(TMP_ADDR);
   
   analogWriteFreq(40000);
   analogWrite(PIN_CLK, 400);
 
-  Serial.println("\r\n");
+  Homie.setLoggingPrinter(&Serial);
 
-  startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
-  
-  startSPIFFS();               // Start the SPIFFS and list all contents
+  // Set up default values for settings
+  sleepDurationSetting.setDefaultValue(DEFAULT_DEEP_SLEEP_MINUTES)
+                      .setValidator([] (long candidate) {
+                        // 72 Minutes is the maximum sleep time supported
+                        // by ESP8266 https://thingpulse.com/max-deep-sleep-for-esp8266/
+                        return candidate > 0 && candidate <= 72;
+                      });
 
-  startWebSocket();            // Start a WebSocket server
-  
-  startMDNS();                 // Start the mDNS responder
+  useLEDSetting.setDefaultValue(DEFAULT_USE_LED);
 
-  startServer();               // Start a HTTP server with a file read handler and an upload handler
+  startCalibrationSetting.setDefaultValue(DEFAULT_START_CALIBRATION);
+
+  moistDryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;
+              });
+
+  moistWetReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_WET_READING_AT_3V)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;
+              });
+
+  // // Workaround for bug https://github.com/homieiot/homie-esp8266/issues/351
+  if (Homie.isConfigured()) {
+    #ifdef DEBUG
+    Serial << "Homie is configured!" << endl;
+    #endif
+
+    // Should we start the calibration wizard?
+    if (startCalibrationSetting.get()) {
+      Serial << "Start calibration wizard! " << testwizard() << endl;
+      run_wizard = true;
+      setup_wizard();
+      return;
+    }
+  } else {
+    #ifdef DEBUG
+    Serial << "Homie is NOT configured!" << endl;
+    #endif
+  }
+ 
+  Homie_setFirmware(FW_NAME, FW_VERSION);
+
+  // Configure homie to use the build in button for configuration reset
+  // Press and hold button for 2sec to reset the homie configuration
+  Homie.setResetTrigger(PIN_BUTTON, LOW, 2000);
+
+  // Advertise properties
+  sensorNode.advertise("moisture")
+            .setName("Moisture")
+            .setDatatype("integer")
+            .setUnit("%");
+  sensorNode.advertise("moistureraw")
+            .setName("Moisture RAW value")
+            .setDatatype("integer")
+            .setUnit("");  
+  sensorNode.advertise("temperature")
+            .setName("Temperature")
+            .setDatatype("float")
+            .setUnit("°C");
+  sensorNode.advertise("battery")
+            .setName("Battery")
+            .setDatatype("integer")
+            .setUnit("%");
+  sensorNode.advertise("batteryraw")
+            .setName("Battery RAW value")
+            .setDatatype("integer")
+            .setUnit("");  
+
+  // Define event handler
+  Homie.onEvent(onHomieEvent);
+
+  // Set LED Pin for status messages, if LED is enabled
+  if (useLEDSetting.get()) {
+    Homie.setLedPin(PIN_LED, 1);
+  } else {
+    Homie.disableLedFeedback();
+  }
+
+  // Setup homie
+  Homie.setup();
 }
 
-unsigned long previousMillis = 0;        // will store last time LED was updated
-
+/*
+ * Function: loop
+ * --------------
+ * Default arduino loop function. Call homie loop. 
+ */
 void loop() {
-
-  unsigned long now = millis();
-
-  webSocket.loop();                           // constantly check for websocket events
-  server.handleClient();                      // run the server
-
-  int battery_raw = 0;
-
-  char cstr[16];
-  char dstr[8];
-
-  unsigned long currentMillis = millis();
-
-  if (currentMillis - previousMillis >= 3000)
-  {
-    digitalWrite(PIN_LED, LOW);
-    previousMillis = currentMillis;
-    // creat JSON message for Socket.IO (event)
-    DynamicJsonDocument doc(1024);
-
-    battery_raw = getBattery();
-    doc["temperature"] = getTemperature();
-    doc["battery_raw"] = battery_raw;
-    doc["moisture_raw"] = getMoisture();
-
-    // webSocket.broadcastTXT(itoa(battery_raw, cstr, 10));
-    // webSocket.broadcastTXT(itoa(getTemperature(), cstr, 10));
-    // dtostrf(getMoisture(battery_raw), 6, 2, dstr);
-
-    // JSON to String (serializion)
-    String output;
-    serializeJson(doc, output);
-
-    webSocket.broadcastTXT(output);
-    now = millis();
-    digitalWrite(PIN_LED, HIGH);
+  if (run_wizard) {
+    wizard_loop();
+  } else {
+    Homie.loop();
+    sleepTimer.update();
   }
 }
