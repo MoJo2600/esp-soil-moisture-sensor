@@ -1,0 +1,13 @@
+version: '3.4'
+services:
+  wizard-dev:
+    build:
+      context: calibration-wizard/
+      target: build-stage
+    restart: unless-stopped
+    command: sh -c "cd /app && npm run serve"
+    volumes:
+      - ./calibration-wizard/:/app/
+      - /app/node_modules
+    ports:
+      - '8080:8080'

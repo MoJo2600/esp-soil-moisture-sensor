@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <sensor.h>
+#include <constants.h>
 
 unsigned long time_now = 0;
 
@@ -16,9 +18,14 @@ void nonBlockingDelay(int waitmillis) {
   }
 }
 
-void initializeTemperatureSensor(int address) {
-  // device address is specified in datasheet
-  Wire.beginTransmission(address); // transmit to device #44 (0x2c)
+/*
+ * Function: initializeTemperatureSensor
+ * --------------------------
+ * This method will initialize the temperature sensor
+ */
+void initializeTemperatureSensor() {
+  // device TMP_ADDR is specified in datasheet
+  Wire.beginTransmission(TMP_ADDR); // transmit to device #44 (0x2c)
   Wire.write(byte(0x01));           // sends instruction byte
   Wire.write(0x60);                 // sends potentiometer value byte
   Wire.endTransmission();           // stop transmitting
@@ -32,49 +39,51 @@ void initializeTemperatureSensor(int address) {
  * connected to the same input pin, this function can be used
  * for both tasks.
  */
-int readSensor(int sensor_pin) {
+int readSensor(int PIN_SENSOR) {
   int total = 0;
   int rawVal = 0;
   int ret = 0;
-  int sampleCount = 3;
 
-  for(int i = 0; i < sampleCount; i++){
-    rawVal = analogRead(sensor_pin);
-    #ifdef DEBUG
-    Homie.getLogger() << "Raw Value: " << rawVal << endl;
-    #endif 
+  for(int i = 0; i < SAMPLE_COUNT; i++){
+    rawVal = analogRead(PIN_SENSOR);
     total += rawVal;
     nonBlockingDelay(50);
   }
 
-  ret = int((float)total / (float)sampleCount);
-
-  #ifdef DEBUG
-  Homie.getLogger() << "Result: " << ret << endl;
-  #endif 
+  ret = int((float)total / (float)SAMPLE_COUNT);
 
   return ret;
 }
 
 /* 
- * Function: getSendMoisture
+ * Function: getMoisture
  * -------------------------
- * This function reads the moisture sensor multiple times and takes the average of the readings.
- * It then publishes this value via MQTT.
+ * This function reads the moisture sensor.
  * 
  * batteryCharge: The current battery charge
  * 
  * Since the reading is related to the battery voltage, a correction is applied to compensate
  * for this.
  */
-int getMoisture(int switch_pin, int sensor_pin) {
+SensorReading getMoisture(int batteryCharge, int dryReading, int wetReading) {
   // Connect Moisture sensor to the Pin via on PCB switch
-  digitalWrite(switch_pin, HIGH);
+  digitalWrite(PIN_SWITCH, HIGH);
   nonBlockingDelay(200);
 
-  int moisture = 0;
-  int moist_raw = readSensor(sensor_pin);
-  return moist_raw;
+  int moist_raw = readSensor(PIN_SENSOR);
+  int moisture_adjusted = BATTERY_FULL_RAW * moist_raw / batteryCharge;
+
+  struct SensorReading reading;
+  reading.adjusted = moisture_adjusted;
+  
+  //reading.percent = 100 - (100 / (dryReading - wetReading) * (moisture_adjusted - wetReading));
+  reading.percent = 100 - map(moisture_adjusted, wetReading, dryReading, 0, 100);
+  reading.percent = reading.percent > 100 ? 100 : reading.percent;
+  reading.percent = reading.percent < 0 ? 0 : reading.percent;
+
+  reading.raw = moist_raw;
+
+  return reading;
 }
 
 /*
@@ -85,18 +94,23 @@ int getMoisture(int switch_pin, int sensor_pin) {
  *  
  * returns: The current battery charge in percent
  */
-int getBattery(int switch_pin, int sensor_pin) {
+SensorReading getBattery() {
   // Connect Battery to the Pin via on PCB switch
-  digitalWrite(switch_pin, LOW);
+  digitalWrite(PIN_SWITCH, LOW);
   nonBlockingDelay(200);
 
-//   int batteryCharge = 0;
-  int battery_raw = readSensor(sensor_pin);
+  int battery_raw = readSensor(PIN_SENSOR);
+  int battery_percent = map(battery_raw, 800, 960, 0, 100);
+  battery_percent = constrain(battery_percent, 0, 100); 
 
-  return battery_raw;
+  struct SensorReading reading;
+  reading.percent = battery_percent;
+  // no adjustment needed for battery
+  reading.adjusted = battery_raw;
+  reading.raw = battery_raw;
+
+  return reading;
 }
-
-
 
 /* 
  * Function: getSendTemperature
@@ -104,19 +118,19 @@ int getBattery(int switch_pin, int sensor_pin) {
  * This function reads the temprature over i2c bus.
  * It then publishes this value via MQTT.
  */
-float getTemperature(int address) {
+float getTemperature() {
   uint8_t temp[2];
   int16_t tempc;
 
   // Begin transmission
-  Wire.beginTransmission(address);
+  Wire.beginTransmission(TMP_ADDR);
   // Select Data Registers
   Wire.write(0X00);
   // End Transmission
   Wire.endTransmission();
  
   // Request 2 bytes , Msb first to get temperature
-  Wire.requestFrom(address, 2);
+  Wire.requestFrom(TMP_ADDR, 2);
   // Read temperature as Celsius (the default)
   if(Wire.available() == 2) {
     temp[0] = Wire.read();

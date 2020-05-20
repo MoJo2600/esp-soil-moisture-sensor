@@ -27,18 +27,12 @@
 
       <v-spacer></v-spacer>
 
-      <!-- <v-btn
-        href="https://github.com/vuetifyjs/vuetify/releases/latest"
-        target="_blank"
-        text
-      > -->
         <v-icon>mdi-thermometer</v-icon>
         <span class="mr-2">{{ temperature }} °C</span>
 
         <v-icon :color="batteryIconColor">{{ batteryIconName }}</v-icon>
-        <span class="mr-2">{{ battery }}</span>
+        <span class="mr-2">{{ battery }}%</span>
         
-      <!-- </v-btn> -->
     </v-app-bar>
 
     <v-content>
@@ -66,10 +60,10 @@ export default {
 
   watch: {
     'battery': function(val) {
-      if (val > 880) {
+      if (val > 66) {
         this.batteryIconColor = '';
         this.batteryIconName = 'mdi-battery-high';
-      } else if (val > 810) {
+      } else if (val > 33) {
         this.batteryIconColor = 'yellow';
         this.batteryIconName = 'mdi-battery-medium';
       } else {
@@ -82,7 +76,7 @@ export default {
   mounted: function() {
     this.$options.sockets.onmessage = message => {
       const jsonData = JSON.parse(message.data);
-      this.battery = jsonData.battery_raw;
+      this.battery = jsonData.battery_percent;
       this.temperature = jsonData.temperature;
     }
   }

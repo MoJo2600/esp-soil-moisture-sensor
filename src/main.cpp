@@ -26,9 +26,7 @@
 #include <Timer.h>
 #include <sensor.h>
 #include <wizard.h>
-
-// if you want to have verbose output, uncomment this:
-#define DEBUG
+#include <constants.h>
 
 #define FW_NAME "esp-soil-moisture-sensor"
 #define FW_VERSION "2.0.0"
@@ -38,37 +36,15 @@ const char *__FLAGGED_FW_NAME = "\xbf\x84\xe4\x13\x54" FW_NAME "\x93\x44\x6b\xa7
 const char *__FLAGGED_FW_VERSION = "\x6a\x3f\x3e\x0e\xe1" FW_VERSION "\xb0\x30\x48\xd4\x1a";
 /* End of magic sequence for Autodetectable Binary Upload */
 
-// DEFAULT SETTINGS
-// sleep time in microseconds
-const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
-// use led or not - the led is good for debugging, but not for battery life
-const bool DEFAULT_USE_LED = true;
-// start calibration wizard or not - when checked, a validation wizard will be started
-const bool DEFAULT_START_CALIBRATION = false;
-// Moisture dry reading @3.0V
-const int DEFAULT_MOIST_DRY_READING_AT_3V = 720;
-// Moisture wet reading @3.0V
-const int DEFAULT_MOIST_WET_READING_AT_3V = 520;
-
 // homie node
 HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
 
 // homie settings
-HomieSetting<bool> startCalibrationSetting("startCalibration", "When checked, the device will start a calibration wizard at http://moistsensor.local");
-HomieSetting<long> sleepDurationSetting("sleepDuration", "The sleep duration in minutes (Maximum 71 minutes)");
+HomieSetting<bool> startCalibrationSetting("startCalibration", "When checked, the device will start a calibration wizard at http://soilsensor.local");
 HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
-HomieSetting<long> moistDryReadingAt3VSetting("moistDryReadingAt3V", "Moisture sensor reading dry at 3V VCC");
-HomieSetting<long> moistWetReadingAt3VSetting("moistWetReadingAt3V", "Moisture sensor reading submerged in water at 3V VCC");
-
-// Pin settings
-const int PIN_CLK    = D5;
-const int PIN_SENSOR = A0; 
-const int PIN_LED    = D7;
-const int PIN_SWITCH = D8;
-const int PIN_BUTTON = D6;
-
-// I2C address for temperature sensor
-const int TMP_ADDR  = 0x48;
+HomieSetting<long> sleepDurationSetting("sleepDuration", "The sleep duration in minutes (Maximum 71 minutes)");
+HomieSetting<long> dryReadingAt3VSetting("DryReadingAt3V", "Sensor reading dry at 3V VCC");
+HomieSetting<long> wetReadingAt3VSetting("WetReadingAt3V", "Sensor reading submerged in water at 3V VCC");
 
 // Timer to prepare to sleep
 Timer sleepTimer;
@@ -84,38 +60,6 @@ void prepareSleep() {
   Homie.prepareToSleep();
 }
 
-// /*
-//  * Function: readSensor
-//  * --------------------
-//  * Reads the sensor connected to pin PIN_SENSOR
-//  * Since the moisture sensor and the battery voltage are
-//  * connected to the same input pin, this function can be used
-//  * for both tasks.
-//  */
-// int readSensor() {
-//   int total = 0;
-//   int rawVal = 0;
-//   int ret = 0;
-//   int sampleCount = 3;
-
-//   for(int i = 0; i < sampleCount; i++){
-//     rawVal = analogRead(PIN_SENSOR);
-//     #ifdef DEBUG
-//     Homie.getLogger() << "Raw Value: " << rawVal << endl;
-//     #endif 
-//     total += rawVal;
-//     nonBlockingDelay(50);
-//   }
-
-//   ret = int((float)total / (float)sampleCount);
-
-//   #ifdef DEBUG
-//   Homie.getLogger() << "Result: " << ret << endl;
-//   #endif 
-
-//   return ret;
-// }
-
 /* 
  * Function: getSendMoisture
  * -------------------------
@@ -128,38 +72,20 @@ void prepareSleep() {
  * for this.
  */
 void getSendMoisture(int batteryCharge) {
-  // // Connect Moisture sensor to the Pin via on PCB switch
-  // digitalWrite(PIN_SWITCH, HIGH);
-  // nonBlockingDelay(200);
+  
+  SensorReading moistureReading = getMoisture(batteryCharge, dryReadingAt3VSetting.get(), wetReadingAt3VSetting.get());
 
-  int moisture = 0;
-  int moist_raw = getMoisture(PIN_SWITCH, PIN_SENSOR);
-  //  readSensor();
-  sensorNode.setProperty("moistureraw").send(String(moist_raw));
+  sensorNode.setProperty("moistureraw").send(String(moistureReading.raw));
 
   #ifdef DEBUG
-  Homie.getLogger() << "Moisture raw: " << moist_raw << endl;
+  Homie.getLogger() << "dry: " << dryReadingAt3VSetting.get() << endl;
+  Homie.getLogger() << "wet: " << wetReadingAt3VSetting.get() << endl;
+  Homie.getLogger() << "Moisture raw: " << moistureReading.raw << endl;
+  Homie.getLogger() << "Moisture adjusted: " << moistureReading.adjusted << endl;
+  Homie.getLogger() << "Moisture percent: " << moistureReading.percent << endl;
   #endif
 
-  // Battery Drop Correction to normalize to reading at 3.0V
-  moisture = 960 * moist_raw / batteryCharge;
-
-  #ifdef DEBUG
-  Homie.getLogger() << "Moisture after battery correction: " << moisture << endl;
-  #endif
-
-  // Map the moisture to the min and max reading of the sensor
-  moisture = map(moisture, moistDryReadingAt3VSetting.get(), moistWetReadingAt3VSetting.get(), 0, 100); // Convert to 0 - 100%, 0=Dry, 100=Wet
-
-  #ifdef DEBUG
-  Homie.getLogger() << "Moisture after mapping: " << moisture << endl;
-  #endif
-
-  if (moisture > 100) moisture = 100;
-  if (moisture <  0) moisture = 0;
-
-  Homie.getLogger() << "Moisture: " << moisture << endl;
-  sensorNode.setProperty("moisture").send(String(moisture));
+  sensorNode.setProperty("moisture").send(String(moistureReading.percent));
 }
 
 /*
@@ -171,31 +97,16 @@ void getSendMoisture(int batteryCharge) {
  * returns: The current battery charge in percent
  */
 int getSendBattery() {
-  // Connect Battery to the Pin via on PCB switch
-  // digitalWrite(PIN_SWITCH, LOW);
-  // nonBlockingDelay(200);
-
-  int batteryCharge = 0;
-  int battery_raw = getBattery(PIN_SWITCH, PIN_SENSOR);
-  // readSensor();
-  sensorNode.setProperty("batteryraw").send(String(battery_raw));
-
-  batteryCharge = map(battery_raw, 800, 1000, 0, 100);
+  struct SensorReading reading = getBattery();
+  sensorNode.setProperty("batteryraw").send(String(reading.raw));
 
   #ifdef DEBUG
-  Homie.getLogger() << "Battery charge after mapping: " << batteryCharge << endl;
-  #endif
- 
-  // if (batteryCharge > 100) batteryCharge = 100;
-  // if (batteryCharge < 0) batteryCharge = 0;
-  
-  #ifdef DEBUG
-  Homie.getLogger() << "Battery: " << batteryCharge << " %" << endl;
+  Homie.getLogger() << "Battery: " << reading.percent << " %" << endl;
   #endif
 
-  sensorNode.setProperty("battery").send(String(batteryCharge));
+  sensorNode.setProperty("battery").send(String(reading.percent));
 
-  return battery_raw;
+  return reading.raw;
 }
 
 /* 
@@ -291,7 +202,7 @@ void setup() {
   // Setup I2C library
   Wire.begin();
 
-  initializeTemperatureSensor(TMP_ADDR);
+  initializeTemperatureSensor();
   
   analogWriteFreq(40000);
   analogWrite(PIN_CLK, 400);
@@ -310,12 +221,12 @@ void setup() {
 
   startCalibrationSetting.setDefaultValue(DEFAULT_START_CALIBRATION);
 
-  moistDryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
+  dryReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_DRY_READING_AT_3V)
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;
               });
 
-  moistWetReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_WET_READING_AT_3V)
+  wetReadingAt3VSetting.setDefaultValue(DEFAULT_MOIST_WET_READING_AT_3V)
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;
               });
@@ -328,7 +239,7 @@ void setup() {
 
     // Should we start the calibration wizard?
     if (startCalibrationSetting.get()) {
-      Serial << "Start calibration wizard! " << testwizard() << endl;
+      Serial << "Starting calibration wizard webserver! " << endl;
       run_wizard = true;
       setup_wizard();
       return;

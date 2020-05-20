@@ -8,11 +8,8 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
+#include <constants.h>
 #include <sensor.h>
-
-String testwizard() {
-  return "foo";
-}
 
 ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
 
@@ -21,19 +18,10 @@ WebSocketsServer webSocket(81);    // create a websocket server on port 81
 
 File fsUploadFile;                 // a File variable to temporarily store the received file
 
-const char *ssid = "soilmoisture"; // The name of the Wi-Fi network that will be created
+const char *ssid = "soilsensor"; // The name of the Wi-Fi network that will be created
 const char *password = "";   // The password required to connect to it, leave blank for an open network
 
-const char* mdnsName = "esp8266"; // Domain name for the mDNS responder
-
-// Pin settings
-const int PIN_CLK    = D5;
-const int PIN_SENSOR = A0; 
-const int PIN_LED    = D7;
-const int PIN_SWITCH = D8;
-const int PIN_BUTTON = D6;
-// I2C address for temperature sensor
-const int TMP_ADDR  = 0x48;
+const char* mdnsName = "soilsensor"; // Domain name for the mDNS responder
 
 
 String formatBytes(size_t bytes) { // convert sizes in bytes to KB and MB
@@ -99,15 +87,14 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
 
   file.close();                                          // Close the file again
 
-
-  WiFi.softAP(ssid, password);             // Start the access point
-  Serial.print("Access Point \"");
-  Serial.print(ssid);
-  Serial.println("\" started\r\n");
+  // WiFi.softAP(ssid, password);             // Start the access point
+  // Serial.print("Access Point \"");
+  // Serial.print(ssid);
+  // Serial.println("\" started\r\n");
 
   wifiMulti.addAP(ssid, password);   // add Wi-Fi networks you want to connect to
-  wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+  // wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
+  // wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
 
   Serial.println("Connecting");
   while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect
@@ -120,9 +107,10 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
     Serial.println(WiFi.SSID());             // Tell us what network we're connected to
     Serial.print("IP address:\t");
     Serial.print(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
-  } else {                                   // If a station is connected to the ESP SoftAP
-    Serial.print("Station connected to ESP8266 AP");
-  }
+  } 
+  // else {                                   // If a station is connected to the ESP SoftAP
+  //   Serial.print("Station connected to ESP8266 AP");
+  // }
   Serial.println("\r\n");
 }
 
@@ -148,25 +136,41 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
     case WStype_CONNECTED: {              // if a new websocket connection is established
         IPAddress ip = webSocket.remoteIP(num);
         Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-        // rainbow = false;                  // Turn rainbow off when a new connection is established
       }
       break;
     case WStype_TEXT:                     // if new text data is received
       Serial.printf("[%u] get Text: %s\n", num, payload);
-    //   if (payload[0] == '#') {            // we get RGB data
-    //     uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
-    //     int r = ((rgb >> 20) & 0x3FF);                     // 10 bits per color, so R: bits 20-29
-    //     int g = ((rgb >> 10) & 0x3FF);                     // G: bits 10-19
-    //     int b =          rgb & 0x3FF;                      // B: bits  0-9
 
-    //     analogWrite(LED_RED,   r);                         // write it to the LED output pins
-    //     analogWrite(LED_GREEN, g);
-    //     analogWrite(LED_BLUE,  b);
-    //   } else if (payload[0] == 'R') {                      // the browser sends an R when the rainbow effect is enabled
-    //     rainbow = true;
-    //   } else if (payload[0] == 'N') {                      // the browser sends an N when the rainbow effect is disabled
-    //     rainbow = false;
-    //   }
+      StaticJsonDocument<512> received;
+      // Deserialize the JSON document
+      DeserializationError error = deserializeJson(received, payload);
+      if (error) {
+        Serial.println(F("Failed to read payload"));
+        return;
+      }
+
+      // get wifi config from homie
+      File file = SPIFFS.open("/homie/config.json", "r");                    // Open the file
+      DynamicJsonDocument doc(1024);
+      // Deserialize the JSON document
+      error = deserializeJson(doc, file);
+      if (error) {
+        Serial.println(F("Failed to read file, using default configuration"));
+        return;
+      }
+
+      doc["settings"]["DryReadingAt3V"] = received["dry"];
+      doc["settings"]["WetReadingAt3V"] = received["wet"];
+      doc["settings"]["startCalibration"] = false;
+
+      file.close();                                          // Close the file again
+
+      file = SPIFFS.open("/homie/config.json", "w");                    // Open the file
+      serializeJson(doc, file);
+      file.close();
+
+      ESP.restart();
+
       break;
   }
 }
@@ -196,29 +200,6 @@ void startServer() { // Start a HTTP server with a file read handler and an uplo
 void setup_wizard() {
   delay(10);
 
-  // Prepare pins
-  pinMode(PIN_CLK, OUTPUT);
-  pinMode(PIN_SENSOR, INPUT);
-  pinMode(PIN_LED, OUTPUT);
-  pinMode(PIN_SWITCH, OUTPUT);
-  pinMode(PIN_BUTTON, INPUT);
-
-  // Set GPIO16 (=D0) pin mode to allow for deep sleep
-  // Connect D0 to RST for this to work.
-  pinMode(D0, WAKEUP_PULLUP);
-  // initialize pin states
-  digitalWrite(PIN_LED, HIGH);
-  digitalWrite(PIN_SWITCH, LOW);
-  digitalWrite(PIN_BUTTON, HIGH);
-
-  // Setup I2C library
-  Wire.begin();
-
-  initializeTemperatureSensor(TMP_ADDR);
-  
-  analogWriteFreq(40000);
-  analogWrite(PIN_CLK, 400);
-
   Serial.println("\r\n");
 
   startWiFi();                 // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
@@ -233,6 +214,8 @@ void setup_wizard() {
 }
 
 unsigned long previousMillis = 0;        // will store last time LED was updated
+SensorReading batteryReading;
+SensorReading moistureReading;
 
 void wizard_loop() {
 
@@ -241,10 +224,6 @@ void wizard_loop() {
   webSocket.loop();                           // constantly check for websocket events
   server.handleClient();                      // run the server
 
-  int battery_raw = 0;
-
-  // char cstr[16];
-  // char dstr[8];
 
   unsigned long currentMillis = millis();
 
@@ -256,10 +235,17 @@ void wizard_loop() {
       // creat JSON message for Socket.IO (event)
       DynamicJsonDocument doc(1024);
 
-      battery_raw = getBattery(PIN_SWITCH, PIN_SENSOR);
-      doc["temperature"] = getTemperature(PIN_SWITCH);
-      doc["battery_raw"] = battery_raw;
-      doc["moisture_raw"] = getMoisture(PIN_SWITCH, PIN_SENSOR);
+      doc["temperature"] = getTemperature();
+
+      batteryReading = getBattery();
+      doc["battery_raw"] = batteryReading.raw;
+      doc["battery"] = batteryReading.adjusted;
+      doc["battery_percent"] = batteryReading.percent;
+
+      moistureReading = getMoisture(batteryReading.raw, DEFAULT_MOIST_DRY_READING_AT_3V, DEFAULT_MOIST_WET_READING_AT_3V);
+      doc["moisture_raw"] = moistureReading.raw;
+      doc["moisture"] = moistureReading.adjusted;
+      doc["moisture_percent"] = moistureReading.percent;
 
       // webSocket.broadcastTXT(itoa(battery_raw, cstr, 10));
       // webSocket.broadcastTXT(itoa(getTemperature(), cstr, 10));
