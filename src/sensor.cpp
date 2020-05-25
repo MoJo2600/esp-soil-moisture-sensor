@@ -100,9 +100,12 @@ SensorReading getBattery() {
   nonBlockingDelay(200);
 
   int battery_raw = readSensor(PIN_SENSOR);
+  // Actual values can be above 960, depeding on the real value
+  // of the voltage divider resistors
+  battery_raw = constrain(battery_raw, 800, 960);
+  
   int battery_percent = map(battery_raw, 800, 960, 0, 100);
-  battery_percent = constrain(battery_percent, 0, 100); 
-
+  
   struct SensorReading reading;
   reading.percent = battery_percent;
   // no adjustment needed for battery
