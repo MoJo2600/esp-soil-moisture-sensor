@@ -140,6 +140,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
 
       doc["settings"]["dryReadingAt3V"] = received["dry"];
       doc["settings"]["wetReadingAt3V"] = received["wet"];
+      doc["settings"]["batteryFull"] = received["battery"];
       doc["settings"]["startCalibration"] = false;
 
       file.close();                                                     // Close the file again
