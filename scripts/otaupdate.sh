@@ -63,4 +63,4 @@ echo -e "md5sum: ${md5sum}"
 mosquitto_pub -d -h $MQTT_HOST -p 1883 -t "homie/$DEVICENAME/\$implementation/ota/checksum" -m "$md5sum" --retain
 
 #send new firmware
-mosquitto_pub -d -h $MQTT_HOST -p 1883 -t "homie/$DEVICENAME/\$implementation/ota/firmware"  -l <<< "$base64enc" --retain 
+mosquitto_pub -d -h $MQTT_HOST -p 1883 -t "homie/$DEVICENAME/\$implementation/ota/firmware/$md5sum"  -l <<< "$base64enc" --retain 

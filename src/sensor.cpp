@@ -65,13 +65,13 @@ int readSensor(int PIN_SENSOR) {
  * Since the reading is related to the battery voltage, a correction is applied to compensate
  * for this.
  */
-SensorReading getMoisture(int batteryCharge, int dryReading, int wetReading) {
+SensorReading getMoisture(int batteryCharge, int dryReading, int wetReading, int batteryFull) {
   // Connect Moisture sensor to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, HIGH);
   nonBlockingDelay(200);
 
   int moist_raw = readSensor(PIN_SENSOR);
-  int moisture_adjusted = BATTERY_FULL_RAW * moist_raw / batteryCharge;
+  int moisture_adjusted = batteryFull * moist_raw / batteryCharge;
 
   struct SensorReading reading;
   reading.adjusted = moisture_adjusted;
@@ -94,7 +94,7 @@ SensorReading getMoisture(int batteryCharge, int dryReading, int wetReading) {
  *  
  * returns: The current battery charge in percent
  */
-SensorReading getBattery() {
+SensorReading getBattery(int batteryEmpty, int batteryFull) {
   // Connect Battery to the Pin via on PCB switch
   digitalWrite(PIN_SWITCH, LOW);
   nonBlockingDelay(200);
@@ -102,14 +102,13 @@ SensorReading getBattery() {
   int battery_raw = readSensor(PIN_SENSOR);
   // Actual values can be above 960, depeding on the real value
   // of the voltage divider resistors
-  battery_raw = constrain(battery_raw, 800, 960);
+  int battery_adjusted = constrain(battery_raw, batteryEmpty, batteryFull);
   
-  int battery_percent = map(battery_raw, 800, 960, 0, 100);
+  int battery_percent = map(battery_adjusted, batteryEmpty, batteryFull, 0, 100);
   
   struct SensorReading reading;
   reading.percent = battery_percent;
-  // no adjustment needed for battery
-  reading.adjusted = battery_raw;
+  reading.adjusted = battery_adjusted;
   reading.raw = battery_raw;
 
   return reading;

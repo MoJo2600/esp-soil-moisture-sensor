@@ -43,8 +43,10 @@ HomieNode sensorNode("soilsensor", "SoilSensor", "soilsensor");
 HomieSetting<bool> startCalibrationSetting("startCalibration", "When checked, the device will start a calibration wizard at http://soilsensor.local");
 HomieSetting<bool> useLEDSetting("useLED", "Defines if the LED should be active");
 HomieSetting<long> sleepDurationSetting("sleepDuration", "The sleep duration in minutes (Maximum 71 minutes)");
-HomieSetting<long> dryReadingAt3VSetting("DryReadingAt3V", "Sensor reading dry at 3V VCC");
-HomieSetting<long> wetReadingAt3VSetting("WetReadingAt3V", "Sensor reading submerged in water at 3V VCC");
+HomieSetting<long> dryReadingAt3VSetting("dryReadingAt3V", "Sensor reading dry at 3V VCC");
+HomieSetting<long> wetReadingAt3VSetting("wetReadingAt3V", "Sensor reading submerged in water at 3V VCC");
+HomieSetting<long> batteryFullSetting("batteryFull", "ADC reading of full battery");
+HomieSetting<long> batteryEmptySetting("batteryEmpty", "ADC reading of empty battery");
 
 // Timer to prepare to sleep
 Timer sleepTimer;
@@ -73,19 +75,15 @@ void prepareSleep() {
  */
 void getSendMoisture(int batteryCharge) {
   
-  SensorReading moistureReading = getMoisture(batteryCharge, dryReadingAt3VSetting.get(), wetReadingAt3VSetting.get());
+  SensorReading moistureReading = getMoisture(batteryCharge, dryReadingAt3VSetting.get(), wetReadingAt3VSetting.get(), batteryFullSetting.get());
 
-  sensorNode.setProperty("moistureraw").send(String(moistureReading.raw));
-
-  #ifdef DEBUG
-  Homie.getLogger() << "dry: " << dryReadingAt3VSetting.get() << endl;
-  Homie.getLogger() << "wet: " << wetReadingAt3VSetting.get() << endl;
-  Homie.getLogger() << "Moisture raw: " << moistureReading.raw << endl;
-  Homie.getLogger() << "Moisture adjusted: " << moistureReading.adjusted << endl;
   Homie.getLogger() << "Moisture percent: " << moistureReading.percent << endl;
-  #endif
+  Homie.getLogger() << "Moisture adjusted: " << moistureReading.adjusted << endl;
+  Homie.getLogger() << "Moisture raw: " << moistureReading.raw << endl;
 
   sensorNode.setProperty("moisture").send(String(moistureReading.percent));
+  sensorNode.setProperty("moisture_adjusted").send(String(moistureReading.adjusted));
+  sensorNode.setProperty("moisture_raw").send(String(moistureReading.raw));
 }
 
 /*
@@ -97,16 +95,17 @@ void getSendMoisture(int batteryCharge) {
  * returns: The current battery charge in percent
  */
 int getSendBattery() {
-  struct SensorReading reading = getBattery();
-  sensorNode.setProperty("batteryraw").send(String(reading.raw));
+  struct SensorReading reading = getBattery(batteryEmptySetting.get(), batteryFullSetting.get());
 
-  #ifdef DEBUG
   Homie.getLogger() << "Battery: " << reading.percent << " %" << endl;
-  #endif
+  Homie.getLogger() << "Battery adjusted: " << reading.adjusted << endl;
+  Homie.getLogger() << "Battery raw: " << reading.raw << endl;
 
   sensorNode.setProperty("battery").send(String(reading.percent));
+  sensorNode.setProperty("battery_adjusted").send(String(reading.adjusted));
+  sensorNode.setProperty("battery_raw").send(String(reading.raw));
 
-  return reading.raw;
+  return reading.adjusted;
 }
 
 /* 
@@ -164,7 +163,7 @@ void onHomieEvent(const HomieEvent& event) {
       getSendMoisture(batteryCharge);
       nonBlockingDelay(200);
       getSendTemperature();
-      Serial << "Finished stuff, preparing for deep sleep..." << endl;
+      Serial << "Finished, preparing for deep sleep..." << endl;
       sleepTimer.after(100, prepareSleep);
       break;
     case HomieEventType::READY_TO_SLEEP:
@@ -230,8 +229,18 @@ void setup() {
               .setValidator([] (long candidate) {
                 return candidate > 0 && candidate <= 1024;
               });
+              
+  batteryFullSetting.setDefaultValue(DEFAULT_BATTERY_FULL_ADC_READING)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;
+              });
 
-  // // Workaround for bug https://github.com/homieiot/homie-esp8266/issues/351
+  batteryEmptySetting.setDefaultValue(DEFAULT_BATTERY_EMPTY_ADC_READING)
+              .setValidator([] (long candidate) {
+                return candidate > 0 && candidate <= 1024;
+              });
+
+
   if (Homie.isConfigured()) {
     #ifdef DEBUG
     Serial << "Homie is configured!" << endl;
@@ -239,7 +248,9 @@ void setup() {
 
     // Should we start the calibration wizard?
     if (startCalibrationSetting.get()) {
+      #ifdef DEBUG
       Serial << "Starting calibration wizard webserver! " << endl;
+      #endif
       run_wizard = true;
       setup_wizard();
       return;
@@ -249,7 +260,7 @@ void setup() {
     Serial << "Homie is NOT configured!" << endl;
     #endif
   }
- 
+
   Homie_setFirmware(FW_NAME, FW_VERSION);
 
   // Configure homie to use the build in button for configuration reset
@@ -261,10 +272,14 @@ void setup() {
             .setName("Moisture")
             .setDatatype("integer")
             .setUnit("%");
-  sensorNode.advertise("moistureraw")
+  sensorNode.advertise("moisture_adjusted")
+            .setName("Moisture adjusted")
+            .setDatatype("integer")
+            .setUnit("#");
+  sensorNode.advertise("moisture_raw")
             .setName("Moisture RAW value")
             .setDatatype("integer")
-            .setUnit("");  
+            .setUnit("#");  
   sensorNode.advertise("temperature")
             .setName("Temperature")
             .setDatatype("float")
@@ -273,10 +288,14 @@ void setup() {
             .setName("Battery")
             .setDatatype("integer")
             .setUnit("%");
-  sensorNode.advertise("batteryraw")
+  sensorNode.advertise("battery_adjusted")
+            .setName("Battery adjusted")
+            .setDatatype("integer")
+            .setUnit("#");  
+  sensorNode.advertise("battery_raw")
             .setName("Battery RAW value")
             .setDatatype("integer")
-            .setUnit("");  
+            .setUnit("#");  
 
   // Define event handler
   Homie.onEvent(onHomieEvent);

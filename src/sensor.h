@@ -33,14 +33,14 @@ int readSensor();
  * -------------------------
  * This function returns the current moisture
  */
-SensorReading getMoisture(int batteryCharge, int dryReading, int wetReading);
+SensorReading getMoisture(int batteryCharge, int dryReading, int wetReading, int batteryFull);
 
 /* 
  * Function: getBattery
  * -------------------------
  * This function returns the current battery reading
  */
-SensorReading getBattery();
+SensorReading getBattery(int batteryEmpty, int batteryFull);
 
 /* 
  * Function: getMoisture

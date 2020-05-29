@@ -6,9 +6,9 @@
 // DEFAULT SETTINGS
 
 // battery reading with 2 fresh AA batteries
-const int BATTERY_FULL_RAW = 960;
+const int DEFAULT_BATTERY_FULL_ADC_READING = 960;
 // batter reading at 2.5 V - ESP will stop working here
-const int BATTERY_EMPTY_RAW = 800;
+const int DEFAULT_BATTERY_EMPTY_ADC_READING = 800;
 // sleep time in microseconds
 const int DEFAULT_DEEP_SLEEP_MINUTES = 60;
 // use led or not - the led is good for debugging, but not for battery life
@@ -34,6 +34,6 @@ const int TMP_ADDR  = 0x48;
 const int SAMPLE_COUNT = 3;
 
 // if you want to have verbose output, uncomment this:
-#define DEBUG
+// #define DEBUG
 
 #endif

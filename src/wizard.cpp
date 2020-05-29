@@ -1,6 +1,4 @@
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-#include <ArduinoOTA.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <Wire.h>
@@ -11,18 +9,10 @@
 #include <constants.h>
 #include <sensor.h>
 
-ESP8266WiFiMulti wifiMulti;       // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
-
 ESP8266WebServer server(80);       // Create a webserver object that listens for HTTP request on port 80
 WebSocketsServer webSocket(81);    // create a websocket server on port 81
 
-File fsUploadFile;                 // a File variable to temporarily store the received file
-
-const char *ssid = "soilsensor"; // The name of the Wi-Fi network that will be created
-const char *password = "";   // The password required to connect to it, leave blank for an open network
-
 const char* mdnsName = "soilsensor"; // Domain name for the mDNS responder
-
 
 String formatBytes(size_t bytes) { // convert sizes in bytes to KB and MB
   if (bytes < 1024) {
@@ -42,7 +32,6 @@ String getContentType(String filename) { // determine the filetype of a given fi
   else if (filename.endsWith(".gz")) return "application/x-gzip";
   return "text/plain";
 }
-
 
 bool handleFileRead(String path) { // send the right file to the client (if it exists)
   Serial.println("handleFileRead: " + path);
@@ -87,17 +76,10 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
 
   file.close();                                          // Close the file again
 
-  // WiFi.softAP(ssid, password);             // Start the access point
-  // Serial.print("Access Point \"");
-  // Serial.print(ssid);
-  // Serial.println("\" started\r\n");
-
-  wifiMulti.addAP(ssid, password);   // add Wi-Fi networks you want to connect to
-  // wifiMulti.addAP("ssid_from_AP_2", "your_password_for_AP_2");
-  // wifiMulti.addAP("ssid_from_AP_3", "your_password_for_AP_3");
+  WiFi.begin(ssid, password);
 
   Serial.println("Connecting");
-  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect
+  while (WiFi.status() != WL_CONNECTED) {  // Wait for the Wi-Fi to connect
     delay(250);
     Serial.print('.');
   }
@@ -108,9 +90,6 @@ void startWiFi() { // Start a Wi-Fi access point, and try to connect to some giv
     Serial.print("IP address:\t");
     Serial.print(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
   } 
-  // else {                                   // If a station is connected to the ESP SoftAP
-  //   Serial.print("Station connected to ESP8266 AP");
-  // }
   Serial.println("\r\n");
 }
 
@@ -150,7 +129,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
       }
 
       // get wifi config from homie
-      File file = SPIFFS.open("/homie/config.json", "r");                    // Open the file
+      File file = SPIFFS.open("/homie/config.json", "r");               // Open the file
       DynamicJsonDocument doc(1024);
       // Deserialize the JSON document
       error = deserializeJson(doc, file);
@@ -159,11 +138,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         return;
       }
 
-      doc["settings"]["DryReadingAt3V"] = received["dry"];
-      doc["settings"]["WetReadingAt3V"] = received["wet"];
+      doc["settings"]["dryReadingAt3V"] = received["dry"];
+      doc["settings"]["wetReadingAt3V"] = received["wet"];
       doc["settings"]["startCalibration"] = false;
 
-      file.close();                                          // Close the file again
+      file.close();                                                     // Close the file again
 
       file = SPIFFS.open("/homie/config.json", "w");                    // Open the file
       serializeJson(doc, file);
@@ -182,10 +161,16 @@ void startWebSocket() { // Start a WebSocket server
 }
 
 void startMDNS() { // Start the mDNS responder
-  MDNS.begin(mdnsName);                        // start the multicast domain name server
-  Serial.print("mDNS responder started: http://");
-  Serial.print(mdnsName);
-  Serial.println(".local");
+  // start the multicast domain name server
+  if (!MDNS.begin(mdnsName)) {
+    Serial.print("Could not start MDNS service!");
+  }
+  else
+  {
+    Serial.print("mDNS responder started: http://");
+    Serial.print(mdnsName);
+    Serial.println(".local");
+  }
 }
 
 void startServer() { // Start a HTTP server with a file read handler and an upload handler
@@ -237,19 +222,15 @@ void wizard_loop() {
 
       doc["temperature"] = getTemperature();
 
-      batteryReading = getBattery();
+      batteryReading = getBattery(DEFAULT_BATTERY_EMPTY_ADC_READING, DEFAULT_BATTERY_FULL_ADC_READING);
       doc["battery_raw"] = batteryReading.raw;
       doc["battery"] = batteryReading.adjusted;
       doc["battery_percent"] = batteryReading.percent;
 
-      moistureReading = getMoisture(batteryReading.raw, DEFAULT_MOIST_DRY_READING_AT_3V, DEFAULT_MOIST_WET_READING_AT_3V);
+      moistureReading = getMoisture(batteryReading.adjusted, DEFAULT_MOIST_DRY_READING_AT_3V, DEFAULT_MOIST_WET_READING_AT_3V, DEFAULT_BATTERY_FULL_ADC_READING);
       doc["moisture_raw"] = moistureReading.raw;
       doc["moisture"] = moistureReading.adjusted;
       doc["moisture_percent"] = moistureReading.percent;
-
-      // webSocket.broadcastTXT(itoa(battery_raw, cstr, 10));
-      // webSocket.broadcastTXT(itoa(getTemperature(), cstr, 10));
-      // dtostrf(getMoisture(battery_raw), 6, 2, dstr);
 
       // JSON to String (serializion)
       String output;

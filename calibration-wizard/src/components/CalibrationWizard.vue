@@ -24,6 +24,16 @@
             </v-card-text>
           </v-card>
         </v-dialog>
+        <v-dialog v-model="finishDialog" hide-overlay persistent width="300">
+          <v-card color="primary" dark>
+            <v-card-title>
+              Done!
+            </v-card-title>
+            <v-card-text>
+              Check your broker for new messages from your sensor!
+            </v-card-text>
+          </v-card>
+        </v-dialog>
         <v-stepper v-model="stepper" vertical>
           <v-stepper-step :complete="stepper > 1" step="1">Welcome</v-stepper-step>
 
@@ -34,16 +44,45 @@
               <ul>
                 <li>A glass of water, large enough to fit the sensor up to the white line</li>
                 <li>A fresh set of AA batteries</li>
-                <li>First we will take a reading of the sensor when it is completely dry</li>
-                <li>Then we will take a reading when it is submerged into water</li>
-              </ul>
+              </ul>              
+            </p>
+            The process is then as follows:
+            <p>
+              <ol>
+                <li>We will take a reading of the battery to determine the current max value</li>
+                <li>We will take a reading of the sensor when it is completely dry</li>
+                <li>We will take a reading when it is submerged into water</li>
+              </ol>
             </p>
             <v-btn color="primary" @click="stepper = 2">Continue</v-btn>
           </v-stepper-content>
 
-          <v-stepper-step :complete="stepper > 2" step="2">Dry / Air reading</v-stepper-step>
+          <v-stepper-step :complete="stepper > 2" step="2">Battery reading</v-stepper-step>
 
           <v-stepper-content step="2">
+            <p>Please make sure that you are using a fresh set of AA batteries.</p>
+            <div class="text-center">
+              <v-btn
+                :disabled="measureDialog"
+                :loading="measureDialog"
+                v-show="!showBatteryMeasureResult"
+                class="white--text"
+                color="purple darken-2"
+                @click="measureBattery"
+              >Take measurements</v-btn>
+            </div>
+            <p v-show="showBatteryMeasureResult">
+              Battery average:
+              <b>{{ batteryAverage }}</b>
+            </p>
+
+            <v-btn color="primary" @click="stepper = 3" :disabled="batteryContinueDisabled">Continue</v-btn>
+          </v-stepper-content>
+
+
+          <v-stepper-step :complete="stepper > 3" step="3">Dry / Air reading</v-stepper-step>
+
+          <v-stepper-content step="3">
             <p>Please make sure that the sensor is completely dry. Do not touch the sensor when taking the readings.</p>
             <div class="text-center">
               <v-btn
@@ -54,17 +93,17 @@
                 color="purple darken-2"
                 @click="measureDry"
               >Take measurements</v-btn>
-              <p v-show="showDryMeasureResult">
-                Dry / Air average:
-                <b>{{ dryAverage }}</b>
-              </p>
             </div>
-            <v-btn color="primary" @click="stepper = 3" :disabled="dryContinueDisabled">Continue</v-btn>
+            <p v-show="showDryMeasureResult">
+              Dry / Air average:
+              <b>{{ dryAverage }}</b>
+            </p>
+            <v-btn color="primary" @click="stepper = 4" :disabled="dryContinueDisabled">Continue</v-btn>
           </v-stepper-content>
 
-          <v-stepper-step :complete="stepper > 3" step="3">Moist / Water reading</v-stepper-step>
+          <v-stepper-step :complete="stepper > 4" step="4">Moist / Water reading</v-stepper-step>
 
-          <v-stepper-content step="3">
+          <v-stepper-content step="4">
             <p>Now place the sensor up to the white line into a glass of tap water. Press the button when ready.</p>
             <div class="text-center">
               <v-btn
@@ -75,16 +114,16 @@
                 color="purple darken-2"
                 @click="measureMoist"
               >Take measurements</v-btn>
-              <p v-show="showMoistMeasureResult">
-                Moist / Water average:
-                <b>{{ moistAverage }}</b>
-              </p>
             </div>
-            <v-btn color="primary" @click="stepper = 4" :disabled="moistContinueDisabled">Continue</v-btn>
+            <p v-show="showMoistMeasureResult">
+              Moist / Water average:
+              <b>{{ moistAverage }}</b>
+            </p>
+            <v-btn color="primary" @click="stepper = 5" :disabled="moistContinueDisabled">Continue</v-btn>
           </v-stepper-content>
 
-          <v-stepper-step step="4">Done</v-stepper-step>
-          <v-stepper-content step="4">
+          <v-stepper-step step="5">Done</v-stepper-step>
+          <v-stepper-content step="5">
             <v-row>
               <v-col cols="6">
                 <JqxGauge
@@ -129,10 +168,13 @@
                 Battery reading: <b>{{ this.battery }}</b>
               </v-col>
             </v-row>
-            <p>The calbration is completed. If you press the button, the sensor will restart and start sending messages to the broker. You can always reset
-              the configuration by disconnecting the battery, long pressing the button, while you insert the batteries.
+            <p>The calbration is completed. If you press the button, the sensor will restart and send messages to the broker.</p>
+            <p>Make sure to close the jumper to enable deep sleep</p>
+            <p>
+              You can always reset the configuration by disconnecting the battery, long pressing the button, while you insert the batteries.
+              Or check the <a href="https://homieiot.github.io/homie-esp8266/docs/3.0.0/others/ota-configuration-updates/">Homie documentaion</a> for OTA configuration updates.
             </p>
-            <v-btn color="primary" @click="save()">Save and restart to Homie</v-btn>
+            <v-btn color="primary" @click="save">Save and restart to Homie</v-btn>
           </v-stepper-content>
         </v-stepper>
       </v-col>
@@ -153,19 +195,23 @@ export default {
   },
 
   data: () => ({
-    calibrationComplete: false,
-    stepper: 1,
+    calibrationComplete: true,
+    stepper: 5,
     sampleCount: 3,
     showDryMeasureResult: false,
     showMoistMeasureResult: false,
+    showBatteryMeasureResult: false,
     measureDialog: false,
+    finishDialog: false,
     measureTopic: "",
 
     dryContinueDisabled: true,
     moistContinueDisabled: true,
+    batteryContinueDisabled: true,
 
     dryValue: 0,
     moistValue: 0,
+    batteryValue: 0,
     query: false,
     showProgress: true,
 
@@ -178,6 +224,7 @@ export default {
 
     dryAverage: 830,
     moistAverage: 770,
+    batteryAverage: 960,
 
     minGauge: 500,
     maxGauge: 900,
@@ -197,10 +244,10 @@ export default {
 
   beforeCreate: function () {
     this.ticksMinor = { interval: 5, size: '5%' };
-    this.ticksMajor = { interval: 25, size: '10%' };
+    this.ticksMajor = { interval: 10, size: '10%' };
     this.labels = { visible: true, position: 'inside', interval: 50 };
     this.style = { stroke: '#ffffff', 'stroke-width': '1px', fill: '#eeeee' };
-    this.caption = { offset: [0, 0], value: 'wet ----- good ----- dry', position: 'bottom' };
+    this.caption = { offset: [0, 0], value: 'wet ------------- dry', position: 'bottom' };
   },
 
   watch: {
@@ -212,7 +259,7 @@ export default {
     },
     stepper(val) {
       if (!val) return;
-      if (val == 4) {
+      if (val == 5) {
         // To display nice gauge labels
         this.minGauge = Math.floor(this.moistAverage/10)*10;
         this.maxGauge = Math.ceil(this.dryAverage/10)*10;
@@ -236,6 +283,7 @@ export default {
       const jsonData = JSON.parse(message.data);
 
       this.moisture_raw = jsonData.moisture_raw;
+      this.battery_raw = jsonData.battery_raw;
       this.battery = jsonData.battery_percent;
 
       if (this.$refs.moistureGauge) {
@@ -251,8 +299,14 @@ export default {
         this.query = false;
 
         if (this.values.length <= this.sampleCount) {
-          this.values.push(jsonData.moisture_raw);
-          this.currentReading = jsonData.moisture_raw;
+          if (this.measureTopic == "battery") {
+            this.values.push(jsonData.battery_raw);
+            this.currentReading = jsonData.battery_raw;
+          } else {
+            this.values.push(jsonData.moisture_raw);
+            this.currentReading = jsonData.moisture_raw;
+          }
+
           this.readingSampleProgress =
             (100 / this.sampleCount) * this.values.length;
 
@@ -268,6 +322,10 @@ export default {
   },
 
   methods: {
+    measureBattery: function() {
+      this.measureTopic = "battery";
+      this.measureDialog = true;
+    },
     measureDry: function() {
       this.measureTopic = "dry";
       this.measureDialog = true;
@@ -289,15 +347,21 @@ export default {
         this.moistAverage = averageValue;
         this.moistContinueDisabled = false;
         this.showMoistMeasureResult = true;
+      } else if (this.measureTopic == "battery") {
+        this.batteryAverage = averageValue;
+        this.batteryContinueDisabled = false;
+        this.showBatteryMeasureResult = true;
       }
     },
     save: function() {
       this.$socket.sendObj(
         { 
           dry: this.dryAverage,
-          wet: this.moistAverage 
+          wet: this.moistAverage, 
+          battery: this.batteryAverage 
         }
       )
+      this.finishDialog = true;
     }
   }
 };
